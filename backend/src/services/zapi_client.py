@@ -20,6 +20,7 @@ class ZAPIClient:
         self,
         instance_id: Optional[str] = None,
         token: Optional[str] = None,
+        client_token: Optional[str] = None,
         base_url: str = "https://api.z-api.io"
     ):
         """
@@ -28,16 +29,20 @@ class ZAPIClient:
         Args:
             instance_id: ID da instância ZAPI (ou usa env ZAPI_INSTANCE_ID)
             token: Token da instância (ou usa env ZAPI_TOKEN)
+            client_token: Client-Token para autenticação (ou usa env ZAPI_CLIENT_TOKEN)
             base_url: URL base da API
         """
         self.instance_id = instance_id or os.getenv("ZAPI_INSTANCE_ID")
         self.token = token or os.getenv("ZAPI_TOKEN")
+        self.client_token = client_token or os.getenv("ZAPI_CLIENT_TOKEN")
         self.base_url = base_url
 
         if not self.instance_id or not self.token:
             logger.warning("⚠️ ZAPI credentials não configuradas")
         else:
             logger.info(f"✅ ZAPI Client inicializado: {self.instance_id[:8]}...")
+            if self.client_token:
+                logger.info(f"✅ Client-Token configurado")
 
     def _get_url(self, endpoint: str) -> str:
         """Constrói URL completa para endpoint."""
@@ -72,7 +77,13 @@ class ZAPIClient:
             logger.debug(f"URL: {url}")
             logger.debug(f"Payload: {payload}")
 
-            response = requests.post(url, json=payload, timeout=10)
+            # Headers com Client-Token se disponível
+            headers = {"Content-Type": "application/json"}
+            if self.client_token:
+                headers["Client-Token"] = self.client_token
+                logger.debug(f"Client-Token adicionado")
+
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
 
             # Log da resposta antes de raise_for_status
             logger.debug(f"Status Code: {response.status_code}")
@@ -128,7 +139,11 @@ class ZAPIClient:
             payload["caption"] = caption
 
         try:
-            response = requests.post(url, json=payload, timeout=10)
+            headers = {"Content-Type": "application/json"}
+            if self.client_token:
+                headers["Client-Token"] = self.client_token
+
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
 
             return {
@@ -174,7 +189,11 @@ class ZAPIClient:
         }
 
         try:
-            response = requests.post(endpoint, json=payload, timeout=10)
+            headers = {"Content-Type": "application/json"}
+            if self.client_token:
+                headers["Client-Token"] = self.client_token
+
+            response = requests.post(endpoint, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
 
             return {
@@ -199,7 +218,11 @@ class ZAPIClient:
         url = self._get_url("status")
 
         try:
-            response = requests.get(url, timeout=10)
+            headers = {}
+            if self.client_token:
+                headers["Client-Token"] = self.client_token
+
+            response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
 
             data = response.json()
