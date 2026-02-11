@@ -1,0 +1,3629 @@
+{
+  "name": "agente_whatsapp",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "=Você é assistente comercial da Roça Capital, especialista em queijos artesanais.\n\n# SEU ESTILO\n- Seja natural e amigável, como um vendedor experiente\n- Use o nome do cliente sempre que possível\n- Não seja robótico nem repetitivo\n- Demonstre entusiasmo genuíno pelos produtos\n- Faça perguntas abertas, não apenas sim/não\n- Utilize técnicas de rapport \n- Seja persuasivo\n\nTELEFONE DO CLIENTE: {{ $('dados_formatados').item.json.telefone_formatado }}\n\nSempre que chamar add_to_cart, INCLUA o telefone acima.\n\n# FERRAMENTAS\n\n# buscar_produtos\nQuando cliente pedir um produto, use esta tool.\n\n##IMPORTANTE\n\n#tool buscar_produtos\nSe a busca utilizando a tool buscar_produtos retornar mais de 10 produtos, informe ao usuário que existem dezenas de opções daquele produto escolhido. Pergunte se ele quer saber quais são os mais vendidos ou se quer saber as recomendações da casa.\n**Importante:**\n- Se retornar 1 produto: apresente naturalmente\n- Se retornar múltiplos: mostre e deixe cliente escolher pelo NOME ou número\n- Se retonar produtos com o mesmo nome, exemplo: \"Queijo do Onésio\" e o mesmo valor exemplo R$125,00 e não tiver uma descrição explícita da diferenciação de cada item, considere ser o mesmo produto e envie para o cliente (Usuário) apenas uma das opções.\n\n\n**Exemplo natural:**\n❌ ROBÓTICO: \"Encontrei 3 opções:\\n1. Produto A\\n2. Produto B\\n3. Produto C\\nQual você prefere?\"\n\n✅ NATURAL: \"Ah, temos 3 queijos canastras deliciosos! 🧀\n\nTem o tradicional de 1kg (R$ 85), perfeito pra família. Tem o mini maurinho de 500g (R$ 45), ótimo pra experimentar. E tem o curado especial de 1kg (R$ 120), esse é premiado!\n\nQual te interessa mais?\"\n\nChame o cliente pelo nome que está salvo no banco de dados supabase (caso esteja salvo)\n\n# FERRAMENTA: add_to_cart\n\nAdiciona produto ao carrinho APÓS confirmação do cliente.\n\n## COMO USAR\n\n**Fluxo obrigatório:**\n1. Cliente pede produto\n2. Você usa buscar_produtos\n3. Mostra opções\n4. Cliente escolhe\n5. Você CONFIRMA: \"Queijo X por R$ Y, tá bom?\"\n6. Cliente diz \"sim\"/\"confirmo\"/\"ok\"\n7. SÓ ENTÃO você chama add_to_cart\n\n## PARÂMETROS\n\n**produto_nome** (obrigatório):\n- Tipo: string\n- Valor: Nome EXATO retornado pelo buscar_produtos\n- Exemplo: \"Queijo Canastra 1kg\"\n- NUNCA abrevie ou mude o nome\n\n**preco** (obrigatório):\n- Tipo: number (NÚMERO, não string!)\n- Valor: Preço decimal SEM R$, SEM vírgula\n- ✅ CORRETO: 85.00\n- ❌ ERRADO: \"R$ 85,00\"\n- ❌ ERRADO: \"85.00\"\n- ❌ ERRADO: 85,00\n\n**quantidade** (opcional):\n- Tipo: number\n- Valor: Quantidade de unidades\n- Padrão: 1\n- Só mude se cliente pedir explicitamente\n\n## EXEMPLO REAL\n```\n[Cliente confirmou Queijo Canastra 1kg por R$ 85.00]\n\nChamada CORRETA:\n{\n  \"produto_nome\": \"Queijo Canastra 1kg\",\n  \"preco\": 85.00,\n  \"quantidade\": 1\n}\n\nChamada ERRADA ❌:\n{\n  \"produto_nome\": \"Queijo Canastra\",\n  \"preco\": \"85.00\",\n  \"quantidade\": 1\n}\n```\n\n## REGRAS CRÍTICAS\n\n❌ NUNCA peça telefone (já está automático)\n❌ NUNCA passe preço como string\n❌ NUNCA abrevie nome do produto\n❌ NUNCA adicione sem confirmação\n✅ Use dados EXATOS do buscar_produtos\n✅ Confirme antes de chamar\n✅ Passe preço como número puro\n\n## RESPOSTA DA TOOL\n\nA tool retorna:\n```\n{\n  \"sucesso\": true,\n  \"mensagem\": \"✅ Adicionado ao carrinho!\\n\\n💰 Total: R$ 85.00\\n📦 Itens: 1\",\n  \"total_carrinho\": 85.00\n}\n```\n\nVocê responde naturalmente:\n\"Prontinho! 😊 Queijo Canastra 1kg no carrinho. Total: R$ 85,00\"\n\n\nQuando cliente quiser pagar:\n\nPergunte: \"Quer pagar com PIX ou Cartão?\"\n\n- PIX: use a tool gerar_pix\n- Cartão: use a tool gerar_pagamento\n\n## gerar_pix\n\nApós chamar gerar_pix, envie DUAS mensagens:\n\n**1ª mensagem:**\n\"💰 Pagamento PIX gerado!\n\nPedido: {{ $json.numero_pedido }}\nTotal: R$ {{ parseFloat($json.total).toFixed(2) }}\"\n\n**2ª mensagem (SÓ O CÓDIGO PIX):**\n{{ $json.qr_code }}\n\n**3ª mensagem:**\n\"✅ Código enviado! É só copiar e colar no seu app do banco para pagar.\n\nQualquer dúvida, estou aqui!\"\n\nREGRAS IMPORTANTES:\n- NÃO envie QR Code automaticamente\n- NÃO pergunte se quer QR Code\n- Só envie QR Code SE o cliente pedir explicitamente\n- A maioria paga pelo celular (copia e cola)\n- Mantenha simples: código + instrução\n\n## view_cart\n\nSEMPRE use view_cart ANTES de gerar pagamento ou confirmar valores.\n\nview_cart({\n  \"telefone\": \"{{ $('dados_formatados').item.json.telefone_formatado }}\"\n\n\nSe retornar vazio=true, carrinho está vazio (total R$ 0,00).\n\n## enviar_qr_code_pix\n\nQuando cliente pedir QR Code PIX:\n\nuse a tool enviar_qr_code_pix({\n  \"telefone\": \"{{ $('dados_formatados').item.json.telefone_formatado }}\"\n})\n\nDepois responda: \"Pronto!\"\n\nSEM dizer \"no seu número\" ou inventar coisas.\n\n## enviar_foto_produto\n\nQuando cliente pedir foto do produto:\n\nenviar_foto_produto({\n  \"telefone\": \"{{ $('dados_formatados').item.json.telefone_formatado }}\",\n  \"produto_id\": \"ID_DO_PRODUTO\"\n})\n\nIMPORTANTE: Use o produto_id retornado pelo buscar_produtos.\n\nExemplo:\n- buscar_produtos retornou produto com id=\"123\"\n- Cliente pede foto\n- Você usa produto_id: \"123\"\n\n## HISTÓRICO DE COMPRAS\n\n### Quando usar buscar_historico_compras:\n\n1. Cliente pergunta \"o que eu já comprei?\"\n2. Cliente quer \"comprar de novo\" ou \"repetir pedido\"\n3. **SEMPRE antes de finalizar compra** (perguntar se quer adicionar algo do histórico)\n\n### Fluxo ideal ao fechar pedido:\n```\nCliente: \"Quero finalizar\"\n\nVocê:\n1. Chama buscar_historico_compras\n2. Se tem histórico:\n   \"Antes de fechar, vi que você já comprou: [lista]\n   Quer adicionar algum desses também?\"\n3. Se não tem histórico:\n   \"Beleza! Vou gerar o pagamento...\"\n```\n\n### Exemplo de uso:\n```\nbuscar_historico_compras({\n  \"telefone\": \"{{ $('dados_formatados').item.json.telefone_formatado }}\"\n})\n\nRetorna: produtos_anteriores = [\n  {nome: \"Queijo X\", preco: 50},\n  {nome: \"Geleia Y\", preco: 30}\n]\n\nVocê sugere: \"Ah, vi que você já comprou Queijo X antes! Quer colocar de novo?\"\n```\n\n## IMPORTANTE\n\n**SEMPRE** chame buscar_historico_compras ANTES de gerar pagamento se:\n- Cliente for antigo (já comprou antes)\n- Carrinho tiver poucos itens\n- Cliente não recusou explicitamente\n\nSeja sutil: \"Ah, aproveitando, quer dar uma olhada no que você já comprou antes?\"\n\n## PAGAMENTO\n\nQuando cliente quiser pagar, pergunte:\n\n\"Quer pagar com PIX ou Cartão?\"\n\n**Se cliente disser PIX:**\n- Use APENAS gerar_pix\n\n**Se cliente disser Cartão/Crédito:**\n- Use APENAS gerar_pagamento\n\nNUNCA use gerar_pagamento para PIX.\nNUNCA use gerar_pix para cartão.\n\n#Sempre utilize a tool Limpar_Carrinho_Apos_PIX depois que usar a tool \"gerar_pagamento\" ou a tool \"gerar_pix\".\n\n## salvar_endereco\n\nQuando cliente enviar o endereço:\n\nsalvar_endereco({\n  \"telefone\": \"{{ $('dados_formatados').item.json.telefone_formatado }}\",\n  \"endereco\": \"ENDEREÇO_QUE_CLIENTE_ENVIOU\"\n})\n\nIMPORTANTE: Use o endereço COMPLETO que o cliente enviou.\n\n## gerar_pagamento (Cartão)\n\nApós chamar, envie o link:\n\n\"💳 Link de pagamento:\\n\\n{{ $json.link_pagamento }}\\n\\nTotal: R$ {{ parseFloat($json.total).toFixed(2) }}\"\n\nIMPORTANTE: Envie o link_pagamento completo.\n\n## tool calcular_frete\n\nSempre utilize essa tool para ter o cálculo exato do frete. Só passe o frete para o cliente, após utilizar essa tool.\n\nCOLETA DE ENDEREÇO PARA FRETE:\n\nQUANDO coletar:\n- Cliente mencionar \"quero comprar\", \"finalizar\", \"fechar o pedido\", \"valor da entrega\", \"quanto fica o frete\"\n- SEMPRE antes de confirmar o pedido final\n\nCOMO coletar:\n\n1. PERGUNTE DE FORMA SIMPLES:\n   \"Para calcular o frete, qual seu endereço?\"\n\n2. ACEITE QUALQUER UM DESTES FORMATOS (SÃO SUFICIENTES):\n   ✅ \"Rua X, 123, Savassi\" → SUFICIENTE - chame calcular_frete\n   ✅ \"Av Paraíba 771\" → SUFICIENTE - chame calcular_frete  \n   ✅ \"30130100\" (CEP) → SUFICIENTE - chame calcular_frete\n   ✅ [localização WhatsApp] → SUFICIENTE - chame calcular_frete\n   ✅ \"Rua X, 123, Centro, BH\" → SUFICIENTE - chame calcular_frete\n\n3. APENAS PEÇA MAIS INFO SE:\n   ❌ Cliente só disse o bairro: \"Estou na Savassi\" → Pergunte: \"Qual a rua e número?\"\n   ❌ Cliente só disse a cidade: \"Moro em BH\" → Pergunte: \"Qual bairro e rua?\"\n\n4. NUNCA PEÇA CEP se já tem rua + número + bairro\n\nCHAMAR A TOOL: calcular_frete({\nendereco_completo: \"Rua Paraíba 771, Savassi, Belo Horizonte, MG\",\nvalor_pedido: <total do carrinho>,\npeso_kg: <peso dos produtos>\n})\n\nAPRESENTAR RESULTADO:\n\"Opções de entrega:\n🏍️ Lalamove - R$ 12,50 (chega em 45min)\n📦 Correios PAC - R$ 18,00 (3-5 dias)\nQual prefere?\"\n\nTRATAMENTO DE ERROS:\n- Se endereço inválido: \"Ops, não consegui localizar. Pode conferir o endereço/CEP?\"\n- Se cálculo falhar: \"Tive um problema aqui. Pode tentar me passar de outro jeito?\"\n\nSe o cliente for da região metropolitana de Belo Horizonte, o tempo de entrega pode varias de acordo com o trânsito e horário.\nSe for da região central, a saber, chegará em pouco tempo, talvez menos de uma hora.\n\nNUNCA:\n❌ Force um formato específico logo de cara\n❌ Seja robótico tipo \"Digite seu CEP:\"\n❌ Faça múltiplas perguntas seguidas\n\nFLUXO DE CHECKOUT COM FRETE:\n\n1. Cliente pede para finalizar/fechar pedido\n2. Você chama `calcular_frete` com os dados do cliente\n3. Apresenta as opções de frete de forma natural\n4. Cliente escolhe uma opção\n5. VOCÊ DEVE chamar `confirmar_frete` com:\n   - session_id\n   - tipo_frete (ex: \"lalamove\", \"correios_sedex\", \"correios_pac\")\n   - valor_frete (valor numérico)\n   - prazo_entrega (ex: \"45 minutos\", \"3-5 dias úteis\")\n6. Após confirmar frete, chama `finalizar_pedido`\n7. O sistema automaticamente soma produtos + frete\n\nEXEMPLO DE CONVERSA:\nCliente: \"Quero finalizar\"\nVocê: [calcula frete]\nVocê: \"Opções de entrega:\n🏍️ Lalamove - R$ 12,50 (45min)\n📦 Correios PAC - R$ 18,00 (3-5 dias)\nQual prefere?\"\n\nCliente: \"Quero a moto\"\nVocê: [chama confirmar_frete com tipo_frete=\"lalamove\", valor_frete=12.50, prazo_entrega=\"45 minutos\"]\nVocê: \"Perfeito! Confirmando seu pedido...\"\nVocê: [chama finalizar_pedido]\nVocê: \"✅ Pedido confirmado!\nProdutos: R$ 180,00\nFrete: R$ 12,50\nTOTAL: R$ 192,50\"\n\nIMPORTANTE - ISOLAMENTO DE CONTEXTO:\n- Cada conversa é INDEPENDENTE\n- NUNCA mencione produtos que o cliente não perguntou\n- Se o cliente perguntar \"queijos de cabra\", busque APENAS queijos de cabra\n- SEMPRE confirme com o cliente antes de assumir qual produto específico ele quer\n- Se houver dúvida, pergunte: \"Qual desses queijos te interessa?\"\n- NÃO POSSUIMOS FRETE GRÁTIS. A depender do valor e do caso, conversar com a vendedora Bianca: 31 97266-6900\n\nNUNCA faça:\n❌ Sugerir produtos aleatórios não relacionados à pergunta\n❌ Assumir que o cliente quer um produto específico sem ele mencionar\n❌ Misturar informações de conversas anteriores\n\nESCALAÇÃO PARA ATENDIMENTO HUMANO:\n\nVocê deve chamar a tool `escalar_atendimento` nas seguintes situações:\n\n1. **Cliente solicita falar com humano:**\n   - \"quero falar com uma pessoa\"\n   - \"me passa para um atendente\"\n   - \"preciso falar com alguém\"\n   → Chame: escalar_atendimento(telefone, motivo=\"pediu_humano\", descricao=\"Cliente solicitou atendimento humano\")\n\n2. **Você não consegue resolver:**\n   - Pergunta complexa sobre produtos\n   - Dúvida sobre pagamento que você não sabe\n   - Problema técnico que não consegue resolver\n   → Chame: escalar_atendimento(telefone, motivo=\"erro_agente\", descricao=\"[descreva o problema]\")\n\n3. **Cliente parece frustrado:**\n   - Repetiu a mesma pergunta 3+ vezes\n   - Demonstra irritação\n   - Diz que não está funcionando\n   → Chame: escalar_atendimento(telefone, motivo=\"erro_consecutivo\", descricao=\"Cliente frustrado após múltiplas tentativas\")\n\nNUNCA tente forçar uma resposta se você não tem certeza. É melhor escalar do que dar informação errada.\n\nApós chamar escalar_atendimento, informe ao cliente:\n\"Vou te conectar com um de nossos vendedores que vai te ajudar pessoalmente. Aguarde um momento! 😊\"\n\nNão possuimos frete grátis. Mas caso seja algo atípico, envie o número da #AjudaHumana para que o cliente fale diretamente com a nossa vendedora Bianca.\n\n#AjudaHumana\nSe der algum erro, o cliente quiser conversar com um vendedor humano, ou você não souber resolver uma situação, envie este contato para o cliente:\nNumero: 31 97266-6900\nVendedora: Bianca \n\n#pagamento\nNão parcelamos\nNão aceitamos boleto\nSó aceitamos pagamento no dinheiro na loja física\n\n# Supabase Vector Store\n\nUtilize essa tool sempre que um cliente perguntar coisas que não seja relacionadas a produto. \nVerifique se há a resposta da pergunta nessa tool, ou se há a resposta aqui no seu system prompt. Não Invente informações de forma alguma!\n\n#Retirada de pedidos\nNão pode fazer retirada ao sábado, exceto se comprar até quinta e combinar a retirada no sábado ou domingo com algum vendedor on-line \n\nNão reservamos produtos para pagar na loja, apenas se o cliente já comprar e colocar como retirada"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -1584,
+        1856
+      ],
+      "id": "d8fa4e44-05fa-4fa3-a4bd-16626cac0e87",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1616,
+        1984
+      ],
+      "id": "e5c1613e-e736-496c-b6a8-94049f7fc446",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('dados_formatados').item.json.telefone_formatado }}",
+        "contextWindowLength": 30
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -1616,
+        2080
+      ],
+      "id": "6d5c5912-eb72-4adb-9aaf-e1bff560fc7f",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "ds4TKxmOTPWbMnKW",
+          "name": "agente_mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Use essa tool sempre que o cliente pedir qualquer tipo de informações sobre um produto em específico.",
+        "workflowId": {
+          "__rl": true,
+          "value": "MgxnlxIt4HDaCZJm",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/MgxnlxIt4HDaCZJm",
+          "cachedResultName": "subworkflow_buscar_produtos"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1376,
+        2096
+      ],
+      "id": "3b5ab9d0-daee-49f4-a91f-8e16d1b8de7c",
+      "name": "buscar_produtos"
+    },
+    {
+      "parameters": {
+        "simplifyOutput": false,
+        "options": {
+          "groupMessages": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -6064,
+        1872
+      ],
+      "id": "1e4237b0-9d16-475f-9204-7175076c4671",
+      "name": "Resgata as mensagens na memória2",
+      "alwaysOutputData": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "fromMe",
+        "sessionTTL": 4800,
+        "contextWindowLength": 10000
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.3,
+      "position": [
+        -6192,
+        2016
+      ],
+      "id": "e2b46006-f27e-43d3-8f80-99e6a1bd0f31",
+      "name": "Memória temporária para gerenciar atendimento humano",
+      "notesInFlow": true,
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b0935f43-ebaa-4a9f-9ec1-0e7e47c215e5",
+              "leftValue": "={{ $json.messages }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -5760,
+        1872
+      ],
+      "id": "d00d09db-3d5c-4853-bdb8-b3ea30f82082",
+      "name": "Verifica se atendimento humano está ativo"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bd1990b9-a0d5-4c2a-afdc-d5e1adb5de2d",
+              "leftValue": "={{ $json.body.data.key.fromMe }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -6352,
+        1808
+      ],
+      "id": "e690def6-f39b-47b5-b602-9652611b4d86",
+      "name": "Verifica se a mensagem vem do número do admin"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -5728,
+        2048
+      ],
+      "id": "3c127d8d-87c0-454d-ad19-6f8189817234",
+      "name": "No Operation, do nothing3",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## Módulo de pausa para atendimento humano",
+        "height": 580,
+        "width": 1160,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -6608,
+        1616
+      ],
+      "id": "571ec5a8-d38c-48d3-b3ee-cf1cd0fdfcf5",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agentewhats-ecb9-46ae-9cde-7f8b138b2655",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -7072,
+        1808
+      ],
+      "id": "b44fbd61-a99c-4f17-bf64-5dcbfc385b62",
+      "name": "Webhook",
+      "webhookId": "d5e5f602-ecb9-46ae-9cde-7f8b138b2655"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d82c5c4d-abf4-44ec-8d6c-56659f8d7576",
+              "leftValue": "={{ $json.body.isEdit }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a2e9441b-e0a7-4a20-984c-077aadf86a65",
+              "leftValue": "={{ $json.body.isGroup }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "231f7a95-7903-4bb1-b94c-c0ba82b6a805",
+              "leftValue": "={{ $json.body.isNewsletter }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "09edccf6-8694-4d70-805e-846dac1cd344",
+              "leftValue": "={{ $json.body.fromApi }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "bf6574b9-061a-4f90-b2c7-cda05ef591e3",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0ecd2e89-53b4-4d81-b6b8-cafa8a1f9d26",
+      "name": "Filtro Inicial1",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.1,
+      "position": [
+        -5408,
+        1856
+      ],
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "content": "## Filtro",
+        "height": 192,
+        "width": 384,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -5456,
+        1808
+      ],
+      "id": "80088e4b-a123-4929-96c0-f07d5c13352c",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=true"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -6064,
+        1696
+      ],
+      "id": "abd8fe3e-1aff-4d45-907a-24fad568a68e",
+      "name": "Cria flag classificando atendimento humano"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -5760,
+        1696
+      ],
+      "id": "e125ef20-37b3-44e7-9e6a-ebfee9bc88c9",
+      "name": "No Operation, do nothing1"
+    },
+    {
+      "parameters": {
+        "content": "## Webhook\n",
+        "height": 192,
+        "width": 150
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -7104,
+        1760
+      ],
+      "id": "cbd8d238-a7d8-468c-bcdb-4598635edfb7",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('parametros_buffer').item.json.EsperaBuffer }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -2544,
+        1856
+      ],
+      "id": "e730d6ca-c06c-4b86-a570-5a0afc5b2ecf",
+      "name": "Wait1",
+      "webhookId": "169ea291-c3dc-4bca-854f-05520c979d7d",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1bd6c365-d077-4284-9dfe-94db1cbe39bd",
+              "leftValue": "={{ $('Buffer 3').item.json.messages.last() }}",
+              "rightValue": "={{ $('Buffer ').item.json.messages.last() }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2224,
+        1856
+      ],
+      "id": "aebb8c23-203f-496c-ad0c-cfcc054ff33a",
+      "name": "ComparandoMensagens1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "messages",
+        "key": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2704,
+        1856
+      ],
+      "id": "09a027c3-976e-48ab-a075-adfaf9c28179",
+      "name": "Buffer ",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "messages",
+        "key": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2384,
+        1856
+      ],
+      "id": "7db73328-fbb9-491f-abaa-3dcaf2a2b148",
+      "name": "Buffer 3",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "messageData": "={{ $json.Texto }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        1504
+      ],
+      "id": "1dea27eb-67b3-4828-89ef-00da5bc075d2",
+      "name": "Add Texto Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $('dados_formatados').item.json.telefone_formatado}}_buffer"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2048,
+        1856
+      ],
+      "id": "20156a24-6005-437a-917e-25bf8473b331",
+      "name": "Apagar Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "messageData": "={{ $json.text }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        1696
+      ],
+      "id": "ec0b58af-e704-43fa-bded-dd9c9447c9a6",
+      "name": "Add Audio Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "messageData": "={{ $json.Erro }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        2256
+      ],
+      "id": "c22f4d16-bc8f-43ed-9bdd-deb4d880a829",
+      "name": "Add Error Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "messageData": "=<ContextoPDF>\n  <TranscricaoPDF>\n{{ $json.text }}\n  </TranscricaoPDF>\nContexto Extra: O usuário encaminhou a mensagem a seguir junto ao PDF.\n  <MensagemUsuario>\n{{ $('Mensagem Documento PDF').item.json.MensagemDocumento }}\n  </MensagemUsuario>\n</ContextoPDF>",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        2064
+      ],
+      "id": "03b66256-d646-4130-91d9-5dd5b1cb6e8c",
+      "name": "Add PDF Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $('dados_formatados').item.json.telefone_formatado }}_buffer",
+        "messageData": "=<ContextoImagem>\n\n  <DetalheImagem>\n{{ $json.content }}\n  </DetalheImagem>\n\nContexto Extra: O usuário encaminhou a mensagem a seguir junto á imagem.\n  <MensagemUsuario>\n{{ $('Mensagem Imagem1').item.json.MensagemImagem }}\n  </MensagemUsuario>\n\n</ContextoImagem>",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2976,
+        1872
+      ],
+      "id": "29ee30f5-dd1b-4f83-b4e1-6075e6f1ed19",
+      "name": "Add Imagem Buffer1",
+      "credentials": {
+        "redis": {
+          "id": "o1DGOryRGDqbTSQT",
+          "name": "VPS_Redis"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2048,
+        2032
+      ],
+      "id": "0c340c97-66a3-41fc-9fa8-f9095962b3b7",
+      "name": "No Operation, do nothing6",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "66a91f66-e755-4120-b22f-44c814f56162",
+              "name": "message",
+              "value": "={{ $('Apagar Buffer1').item.json.messages.join('\\n\\n') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1840,
+        1856
+      ],
+      "id": "ed349686-7e5b-4c9c-ba94-f50a019a456b",
+      "name": "Mensagem1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "content": "tempos de buffer e inatividade do agente.\n",
+        "height": 216,
+        "width": 190,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -6864,
+        1744
+      ],
+      "id": "12c83817-6110-4bb6-bf85-81dee39ef440",
+      "name": "Sticky Note18"
+    },
+    {
+      "parameters": {
+        "content": "## Central de controle do workflow",
+        "height": 540,
+        "width": 324,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -6928,
+        1632
+      ],
+      "id": "9706f312-6d9f-472b-a093-a2f0f35563f1",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3bdce7b6-d0f1-442c-aafd-8cd123aa21b6",
+              "name": "EsperaBuffer",
+              "value": 20,
+              "type": "number"
+            },
+            {
+              "id": "c38e8985-4494-40a4-878e-f25467849842",
+              "name": "TempoInatividadeAgente",
+              "value": 900,
+              "type": "number"
+            },
+            {
+              "id": "ac619a5e-1438-4e19-aaf5-21dfcbc32312",
+              "name": "ModeloTemperatura",
+              "value": 0.4,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -6816,
+        1808
+      ],
+      "id": "dc24d50a-a712-4b62-a4e5-b8abaef5eecc",
+      "name": "parametros_buffer",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clientes (telefone, nome)\nVALUES (\n  '{{ $json.telefone_formatado }}',\n  '{{ $json.nome }}'\n)\nON CONFLICT (telefone) \nDO UPDATE SET updated_at = NOW()\nRETURNING *;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -5008,
+        1856
+      ],
+      "id": "f4a58425-5627-4dd8-af9c-94a40de4f1e5",
+      "name": "buscar_ou_criar_cliente",
+      "credentials": {
+        "postgres": {
+          "id": "ds4TKxmOTPWbMnKW",
+          "name": "agente_mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.Audio }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3904,
+        1696
+      ],
+      "id": "bcf8a65d-61e9-4125-9a4d-df372891325f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.Documento }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3904,
+        2064
+      ],
+      "id": "db4b81a2-178e-4521-8c16-2874c0d1c6ee",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "bc64f125-d93c-4d1d-97ae-65c0adb08b79",
+                    "leftValue": "={{ $('Webhook').item.json.body.text.message }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "texto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "137aec3f-e95e-4d59-b9ba-1140f9fc4fb4",
+                    "leftValue": "={{ $('Webhook').item.json.body.audio.audioUrl }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.image.imageUrl }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "id": "40b284c8-fdf7-49e5-9ac3-8c5051f51521"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imagem"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "7babc8fd-200c-4cb8-bc63-f999f57d5217",
+                    "leftValue": "={{ $('Webhook').item.json.body.document.mimeType }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Outro"
+        }
+      },
+      "id": "69e3d369-1789-4e9f-aef6-5df957d48b0f",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.1,
+      "position": [
+        -4384,
+        1824
+      ],
+      "notesInFlow": true,
+      "notes": "Ajustar condições para cada tipo de mensagem a depender da sua entrada de dados\n\nTEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "binaryPropertyName": "=data",
+        "options": {
+          "language": "pt"
+        }
+      },
+      "id": "5a4e8d4e-e4a1-4036-8fef-35a74dae3922",
+      "name": "Transcrever Áudio",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -3680,
+        1696
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "text": "=#Instruções\nO usuário te enviou uma imagem a qual você deve descrever.\n\nA imagem pode vir acompanhada de uma mensagem de texto (<MensagemUsuario>)\n\nCaso venha, utilize a mensagem anexa como contexto extra, tente capturar o sentimento da mensagem e objetivo pelo qual o usuário esteja enviando esta imagem na conversa.\n\nCrie uma resposta descrevendo as informações enviadas para que estas sejam utilizadas por um agente no futuro.\n\nLembre-se:\nEste agente apenas terá as informações que você fornecer, portanto repasse toda informação que julgar importante.\n\n#Dados\n<MensagemUsuario>\n{{ $json.MensagemImagem }}\n</MensagemUsuario>\n",
+        "imageUrls": "={{ $json.Imagem }}",
+        "options": {}
+      },
+      "id": "5a7c3c8c-f658-40a1-8e65-205d66d7c941",
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [
+        -3904,
+        1872
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      },
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1ce011b-bd95-468e-863e-f2076f644cf9",
+              "name": "Texto",
+              "value": "={{ $('Webhook').item.json.body.text.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4160,
+        1504
+      ],
+      "id": "f7a8ffef-fb6b-49be-9026-cce76d1bdc14",
+      "name": "Mensagem Texto",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5efc6961-1ff7-4ef2-a772-7e9761592a3e",
+              "name": "Audio",
+              "value": "={{ $('Webhook').item.json.body.audio.audioUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4160,
+        1696
+      ],
+      "id": "88455c85-b6b6-4446-8b00-31ac79f8f37e",
+      "name": "Mensagem Audio",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5efc6961-1ff7-4ef2-a772-7e9761592a3e",
+              "name": "Imagem",
+              "value": "={{ $('Webhook').item.json.body.image.imageUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "f5c70ab5-7671-4bc8-9d23-65b8954ddb08",
+              "name": "MensagemImagem",
+              "value": "={{ $('Webhook').item.json.body.image.caption }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4160,
+        1872
+      ],
+      "id": "8cc92404-43b0-4283-a090-d8fc92ef6b42",
+      "name": "Mensagem Imagem",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -3680,
+        2064
+      ],
+      "id": "f6d44633-d86b-4ae8-9aa4-ff7a76adbced",
+      "name": "Extract from File2",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "11dc126a-e72e-431b-8db5-c78168c69439",
+              "name": "Erro",
+              "value": "<ErroFormatoMensagem>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4160,
+        2256
+      ],
+      "id": "d05fa7f2-ae31-44de-a8b5-368985cbad7a",
+      "name": "Mensagem Erro",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5efc6961-1ff7-4ef2-a772-7e9761592a3e",
+              "name": "Documento",
+              "value": "={{ $('Webhook').item.json.body.document.documentUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "003323ec-ffbe-4c91-b8b5-623466b5014d",
+              "name": "MensagemDocumento",
+              "value": "={{ $('Webhook').item.json.body.document.caption }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4160,
+        2064
+      ],
+      "id": "70e3b84f-091a-4b89-8149-5574bee285e6",
+      "name": "Mensagem Documento PDF1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -4608,
+        1872
+      ],
+      "id": "a5a204a7-4aa9-44b5-8438-647aa7df194e",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "95590d1c-b5ae-4857-8481-e29b4b1bbc29",
+              "name": "telefone_formatado",
+              "value": "={{ $('Webhook').item.json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "e8f0665e-9e98-4be6-8c8b-e5815e2a6819",
+              "name": "nome",
+              "value": "={{ $('Webhook').item.json.body.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "805912b6-aa84-4762-90ed-445a0d115d79",
+              "name": "message",
+              "value": "={{ $('Webhook').item.json.body.text.message }}",
+              "type": "string"
+            },
+            {
+              "id": "5cbe3684-abb9-42ef-a582-8d159787ed97",
+              "name": "conversa_id",
+              "value": "={{ $('Webhook').item.json.body.phone }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -5216,
+        1856
+      ],
+      "id": "8de155fb-df70-4de5-b70a-2311ae086412",
+      "name": "dados_formatados"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1e66db0-00dc-481d-951c-1fde558e268e",
+              "name": "text",
+              "value": "={{ typeof $json.output === 'string' ? $json.output.split('\\\\n\\\\n').filter(t => t.trim()) : $json.output }}",
+              "type": "array"
+            },
+            {
+              "id": "ddbcf81b-d69f-4c57-a0c4-634cd79f9696",
+              "name": "",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2703df98-1a69-496f-8c1d-8386573962f6",
+      "name": "Edit Fields5",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -992,
+        1872
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "84b6e91c-5e7c-4604-8609-f8a0e6fa8b01",
+                    "leftValue": "={{ $json.text }}",
+                    "rightValue": ".wav,. mp3, .mov, .mkv, .pdf, .jpeg, .jpg, .png, .webp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notContains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "texto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.text.match(/https:\\/\\/.*\\.(jpeg|jpg|png|webp)/g) != null }}",
+                    "rightValue": "https",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "d35f0f03-360e-47e9-a72b-9749a4323ded"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imagem"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d79a2730-893f-452f-9277-f0b451f4bfe5",
+      "name": "Switch2",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        352,
+        1888
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "4e28eece-5645-4f41-a19d-08f0d1a590c8",
+      "name": "Wait2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        1888
+      ],
+      "webhookId": "20d00dc1-91ed-4b45-9084-025c3c44452a"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output.mensagens",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        1872
+      ],
+      "id": "2cf08b96-223a-4a99-b545-662ebd0b55d6",
+      "name": "Split Out1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        1872
+      ],
+      "id": "cd662e51-89b4-4578-9485-7b1cdc094778",
+      "name": "Loop Over Items1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        1840
+      ],
+      "id": "c6f51937-6da4-4b9d-9684-fdaf46678bb3",
+      "name": "Wait3",
+      "webhookId": "65ff8064-0a3a-4195-bf63-5cc130c8fe48",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        512,
+        1648
+      ],
+      "id": "76f40a65-8e68-4c86-86ad-1dd6c243ebae",
+      "name": "No Operation, do nothing5",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        2000
+      ],
+      "id": "eb0c4c2b-2f17-4aaa-90e0-a1eb5be8c39d",
+      "name": "Auto-fixing Output Parser1",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -800,
+        2144
+      ],
+      "id": "40e71a7e-2f4b-4afd-9f14-e99a9823100c",
+      "name": "OpenAI Chat Model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"mensagens\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    }\n  },\n  \"required\": [\"mensagens\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -528,
+        2160
+      ],
+      "id": "e376d686-87bc-4952-ba10-4b672a8129a9",
+      "name": "Structured Output Parser [Schema]",
+      "notes": "TEMPLATE DESENVOLVIDO POR NOCODE STARTUP\nhttps://nocodestartup.io/\n\nFORMAÇÃO GESTOR DE AGENTES DE IA:\nhttps://nocodestartup.io/formacao-gestor-agentes-ia/"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=<mensagem_do_usuario>\n{{ $json.text}}\n</mensagem_do_usuario>",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Apenas estruture a <mensagem_do_usuario> no formato JSON solicitado no output parser e seguindo as instruções de formatação abaixo. Não altere nada mais na mensagem\n\n# Formatação\n- Divida as mensagens para que fiquem naturais e humanizadas;\n- Divida as mensagens conforme estrutura do output parser para que não fiquem muito longas (maiores que 240 caractéres);\n- Não separe mensagens vazias;\n- Use quebras de linhas (\\n\\n) após pontos finais;\n- Para negrito (bold) use apenas um '' nunca duas '' (exemplo: *negrito).\n\nExemplo de formato JSON:\n{\n\"mensagens\": [\"Mensagem 0\", \"Mensagem 1\", \"Mensagem 2\"]\n}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.6,
+      "position": [
+        -800,
+        1872
+      ],
+      "id": "a8f331c7-cce7-4aab-9361-b500eb39f98d",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        2000
+      ],
+      "id": "23c26bac-7b57-41c2-9cea-72b6da4beea2",
+      "name": "Wait4",
+      "webhookId": "b7a50ced-6e78-4ebe-832e-c3ea19a5b78e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z-api.io/instances/3EA7C82741282290CFAD7EDE6B443D3D/token/B6E82D6B4967DFAD363845FD/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "client-token",
+              "value": "F4239d3a1cd1644318025c763d117b00fS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json['output.mensagens'] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        560,
+        1840
+      ],
+      "id": "fa7329fb-9a5b-4bbf-a3b5-642618dfcb9e",
+      "name": "Enviar_texto"
+    },
+    {
+      "parameters": {
+        "description": "=Adiciona produto ao carrinho\n\nQUANDO USAR:\n- Cliente disse \"sim\", \"confirmo\", \"quero\", \"pode ser\" após você mostrar produto e preço\n\nPARÂMETROS:\n- produto_nome: Nome COMPLETO do produto (obrigatório)\n- preco: Preço em número decimal como 85.00 (obrigatório)\n- quantidade: Número de unidades, padrão 1\n\nIMPORTANTE: NÃO peça telefone, ele é automático.",
+        "workflowId": {
+          "__rl": true,
+          "value": "EwopybHlWPtQKpg1",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/EwopybHlWPtQKpg1",
+          "cachedResultName": "Flow_Add_To_Cart"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "preco": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('preco', `preço do produto`, 'number') }}",
+            "quantidade": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('quantidade', `quantidade do produto`, 'number') }}",
+            "produto_nome": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('produto_nome', `nome do produto `, 'string') }}",
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "produto_nome",
+              "displayName": "produto_nome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preco",
+              "displayName": "preco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "quantidade",
+              "displayName": "quantidade",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1296,
+        2224
+      ],
+      "id": "db824350-3c1b-4893-bdd3-4444f438d140",
+      "name": "add_to_cart"
+    },
+    {
+      "parameters": {
+        "description": "Use essa tool para remover produtos do carrinho caso seja solicitado pelo usuário",
+        "workflowId": {
+          "__rl": true,
+          "value": "LiyYWm2QidJFrqj6",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/LiyYWm2QidJFrqj6",
+          "cachedResultName": "Remover_do_carrinho"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "preco": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('preco', `preço do produto`, 'number') }}",
+            "produto_nome": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('produto_nome', `nome do produto`, 'string') }}",
+            "quantidade": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('quantidade', `quantidade do produto`, 'string') }}",
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "produto_nome",
+              "displayName": "produto_nome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preco",
+              "displayName": "preco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "quantidade",
+              "displayName": "quantidade",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1024,
+        2368
+      ],
+      "id": "aafcf7d0-4f82-48e7-ab61-10d8771d092f",
+      "name": "Remover_do_carrinho"
+    },
+    {
+      "parameters": {
+        "description": "Utilize essa tool para gerar o pix para o cliente",
+        "workflowId": {
+          "__rl": true,
+          "value": "XvscXOyTn8WHpvvL",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/XvscXOyTn8WHpvvL",
+          "cachedResultName": "gerar_pix"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [
+            "telefone"
+          ],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1200,
+        2304
+      ],
+      "id": "c71d675c-ea6a-48e7-a4f0-6f14e57d2668",
+      "name": "gerar_pix"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z-api.io/instances/3EA7C82741282290CFAD7EDE6B443D3D/token/B6E82D6B4967DFAD363845FD/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "client-token",
+              "value": "F4239d3a1cd1644318025c763d117b00fS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json['output.mensagens'] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        560,
+        2000
+      ],
+      "id": "084d47a1-b3b4-40a9-82fd-373198024299",
+      "name": "Enviar_imagem"
+    },
+    {
+      "parameters": {
+        "description": "Busca produtos que o cliente já comprou antes.\nUse para:\n- Mostrar histórico ao cliente\n- Sugerir recompra de produtos favoritos\n- Facilitar nova compra",
+        "workflowId": {
+          "__rl": true,
+          "value": "DbEom75V52aYrwo8",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DbEom75V52aYrwo8",
+          "cachedResultName": "buscar_historico_compra"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [
+            "telefone"
+          ],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -720,
+        2768
+      ],
+      "id": "9df19423-9a73-4d77-bebc-f6abac7ad32c",
+      "name": "buscar_historico_compra"
+    },
+    {
+      "parameters": {
+        "description": "Quando cliente pedir foto, use o nome EXATO do produto que está no carrinho ou que foi buscado.",
+        "workflowId": {
+          "__rl": true,
+          "value": "GAtRSN4P3hPiSF6P",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/GAtRSN4P3hPiSF6P",
+          "cachedResultName": "enviar_foto_produto"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "produto_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('produto_id', ``, 'string') }}",
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "produto_id",
+              "displayName": "produto_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -912,
+        2592
+      ],
+      "id": "9b82fffd-e36c-44e3-b751-89caad25e952",
+      "name": "enviar_foto_produto"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "FAQ da Roça Capital sobre políticas de entrega, retirada, formas de pagamento e informações gerais da loja.\n\nUSE QUANDO:\n- Cliente perguntar sobre entrega, frete, prazo\n- Cliente perguntar onde retirar, endereço da loja\n- Cliente perguntar sobre formas de pagamento aceitas\n- Cliente perguntar sobre horário de funcionamento\n- Cliente perguntar sobre devolução, troca, garantia\n- Cliente perguntar \"como funciona\", \"qual o processo\"\n\nNÃO USE PARA:\n- Buscar produtos (use buscar_produtos)\n- Informações sobre ingredientes de produtos específicos\n- Adicionar ao carrinho (use add_to_cart)\n- Gerar pagamento (use gerar_pix ou gerar_pagamento)\n\nEXEMPLO:\nCliente: \"Vocês entregam em BH?\"\n→ Consulta vector store\n\nCliente: \"Quanto custa o frete?\"\n→ Consulta vector store\n\nCliente: \"Tem queijo?\"\n→ Use buscar_produtos (NÃO vector store)\n\nRetorna informações sobre políticas e funcionamento da loja.",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        -1664,
+        2256
+      ],
+      "id": "2baab960-7647-452f-bfd4-340b8f086bfb",
+      "name": "Supabase Vector Store",
+      "credentials": {
+        "supabaseApi": {
+          "id": "KDjab8k2e2WNSNoz",
+          "name": "agentemcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1664,
+        2368
+      ],
+      "id": "57bf6e49-3923-43c9-b260-50668ee8d04a",
+      "name": "Embeddings OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "18nraZBOjbUY6fZ2EwiFIPtQotBX_XchD",
+          "mode": "list",
+          "cachedResultName": "rag_n8n",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/18nraZBOjbUY6fZ2EwiFIPtQotBX_XchD"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -8608,
+        2976
+      ],
+      "id": "abf40f6c-bc96-4f7d-8859-f55908fedd49",
+      "name": "Google Drive Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Pc89lgHfzCvbKbIj",
+          "name": "Drive_OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# RAG",
+        "height": 544,
+        "width": 1072,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -8656,
+        2832
+      ],
+      "id": "24134470-a85d-4c1e-b6ab-d81f58c9dc5e",
+      "name": "Sticky Note19"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -8448,
+        2976
+      ],
+      "id": "55e16537-b3e3-4fdc-9740-61599d7c8010",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Pc89lgHfzCvbKbIj",
+          "name": "Drive_OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -8288,
+        2976
+      ],
+      "id": "15334650-0b2c-4448-ab40-e981bf4b7605",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        -8048,
+        3152
+      ],
+      "id": "f9d674cc-7ae3-439b-a1da-f37c0cf933f1",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -7776,
+        2976
+      ],
+      "id": "8b08b46e-c212-4dc3-8cce-a88910f6a844",
+      "name": "No Operation, do nothing2"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        -8128,
+        2976
+      ],
+      "id": "f10aae9a-d9c8-4124-9e87-36b4e2f89fff",
+      "name": "Supabase Vector Store1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "KDjab8k2e2WNSNoz",
+          "name": "agentemcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -8192,
+        3136
+      ],
+      "id": "90a61b8a-d703-40bc-9420-6fbcb3b7757a",
+      "name": "Embeddings OpenAI1",
+      "credentials": {
+        "openAiApi": {
+          "id": "KrNL0cnjJLzXOrVH",
+          "name": "OpenAi account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE clientes\nSET \n  ultima_msg_cliente = NOW(),\n  recuperacao_15min_enviada = false,\n  recuperacao_4h_enviada = false,\n  recuperacao_24h_enviada = false\nWHERE telefone = '{{ $json.telefone_formatado }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -4816,
+        1856
+      ],
+      "id": "7196e83a-2c2a-4697-a1c4-0993b0b20c83",
+      "name": "Atualizar_Ultima_Interacao",
+      "credentials": {
+        "postgres": {
+          "id": "ds4TKxmOTPWbMnKW",
+          "name": "agente_mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE clientes\nSET \n  updated_at = NOW(),\n  ultima_msg_cliente = NOW(),\n  ultima_msg_agente = NOW(),\n  recuperacao_15min_enviada = false,\n  recuperacao_4h_enviada = false,\n  recuperacao_24h_enviada = false\nWHERE telefone = '{{ $('dados_formatados').item.json.telefone_formatado }}'::text\nRETURNING telefone, updated_at, ultima_msg_cliente, ultima_msg_agente;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -16,
+        1776
+      ],
+      "id": "476c2a9b-68d5-4af5-a496-b1a710113f90",
+      "name": "Atualizar_Msg_Agente",
+      "credentials": {
+        "postgres": {
+          "id": "ds4TKxmOTPWbMnKW",
+          "name": "agente_mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM n8n_chat_histories",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        80
+      ],
+      "id": "b824c742-bc19-40ec-8eeb-e4f095722d17",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "ds4TKxmOTPWbMnKW",
+          "name": "agente_mcp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Envia QR Code PIX quando cliente pedir.",
+        "workflowId": {
+          "__rl": true,
+          "value": "6lBxT1kirc8LrRIB",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/6lBxT1kirc8LrRIB",
+          "cachedResultName": "enviar_qr_code_pix"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "qr_code_base64",
+              "displayName": "qr_code_base64",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1120,
+        2400
+      ],
+      "id": "5f8a1ece-d469-41ef-9af7-e8dce34ff04e",
+      "name": "enviar_qr_code_pix"
+    },
+    {
+      "parameters": {
+        "description": "Utilize essa tool para salvar o endereço do cliente.",
+        "workflowId": {
+          "__rl": true,
+          "value": "xHvhl3pmKwTBb8Z1",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/xHvhl3pmKwTBb8Z1",
+          "cachedResultName": "salvar_endereco"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}",
+            "endereco": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('endereco', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "endereco",
+              "displayName": "endereco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1008,
+        2496
+      ],
+      "id": "d4ddd4d0-3010-4ee0-9de1-c7cd01af60a8",
+      "name": "salvar_endereco"
+    },
+    {
+      "parameters": {
+        "description": "Mostra o carrinho atual do cliente.\n\nUSE SEMPRE antes de:\n- Gerar pagamento\n- Confirmar valor total\n- Cliente perguntar \"quanto está\"",
+        "workflowId": {
+          "__rl": true,
+          "value": "gtQuqay9QxVEwd4e",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/gtQuqay9QxVEwd4e",
+          "cachedResultName": "view_cart"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [
+            "telefone"
+          ],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -800,
+        2688
+      ],
+      "id": "d3f3d5b8-504d-4225-8082-28f63e3bdd55",
+      "name": "view_cart"
+    },
+    {
+      "parameters": {
+        "description": "Utilize essa tool para gerar links de pagamento quando o método for cartão de crédito ou débito.",
+        "workflowId": {
+          "__rl": true,
+          "value": "CNVwQtlJPw3aibGw",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/CNVwQtlJPw3aibGw",
+          "cachedResultName": "gerar_pagamento"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}"
+          },
+          "matchingColumns": [
+            "telefone"
+          ],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -624,
+        2880
+      ],
+      "id": "a9d4c1e7-436d-4047-af58-21b35d115c6f",
+      "name": "gerar_pagamento"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "5NlYCniqQ7oBw3PQ",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/5NlYCniqQ7oBw3PQ",
+          "cachedResultName": "Verificar_Status_Pedido"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ $('dados_formatados').item.json.telefone_formatado }}",
+            "numero_pedido": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('numero_pedido', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "numero_pedido",
+              "displayName": "numero_pedido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        2976
+      ],
+      "id": "36da152a-b66c-4b08-828d-6d7b1d67af52",
+      "name": "Verificar_Status_Pedido"
+    },
+    {
+      "parameters": {
+        "description": "Utilize essa tool para calcular o frete de envio para o cliente.",
+        "workflowId": {
+          "__rl": true,
+          "value": "WPze0Yoo1PrLESK0",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/WPze0Yoo1PrLESK0",
+          "cachedResultName": "calcular_frete"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "valor_pedido": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('valor_pedido', ``, 'number') }}",
+            "peso_kg": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('peso_kg', ``, 'number') }}",
+            "cep_destino": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('cep_destino', ``, 'string') }}",
+            "endereco_completo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('endereco_completo', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "cep_destino",
+              "displayName": "cep_destino",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "endereco_completo",
+              "displayName": "endereco_completo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "valor_pedido",
+              "displayName": "valor_pedido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "peso_kg",
+              "displayName": "peso_kg",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -416,
+        3056
+      ],
+      "id": "8461e164-b214-4127-b8ab-2d05caea1c8d",
+      "name": "calcular_frete"
+    },
+    {
+      "parameters": {
+        "description": "Use essa tool para salvar o valor do frete no banco de dados.",
+        "workflowId": {
+          "__rl": true,
+          "value": "Ct5G2ARYYyjnCXZX",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Ct5G2ARYYyjnCXZX",
+          "cachedResultName": "confirmar_frete"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "valor_frete": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('valor_frete', ``, 'number') }}",
+            "telefone": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('telefone', ``, 'string') }}",
+            "tipo_frete": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('tipo_frete', ``, 'string') }}",
+            "prazo_entrega": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('prazo_entrega', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "valor_frete",
+              "displayName": "valor_frete",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "tipo_frete",
+              "displayName": "tipo_frete",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "prazo_entrega",
+              "displayName": "prazo_entrega",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        3104
+      ],
+      "id": "acc7afd0-503a-42af-afb7-99c3dfa107b7",
+      "name": "confirmar_frete"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensagem = $json.mensagem_original?.toLowerCase() || '';\nconst totalErros = $json.total_erros || 0;\nconst toolChamada = $json.tool_chamada || '';\n\n// Verificar se deve escalar\nconst devescalar = \n  toolChamada === 'escalar_atendimento' ||\n  totalErros >= 3 ||\n  mensagem.includes('falar com atendente') ||\n  mensagem.includes('falar com pessoa') ||\n  mensagem.includes('quero falar com alguém') ||\n  mensagem.includes('me passa para humano') ||\n  mensagem.includes('atendente humano');\n\nreturn {\n  json: {\n    ...inputData,\n    escalar: deveEscalar,\n    motivo_escalacao: toolChamada ? 'pediu_humano' : \n                      totalErros >= 3 ? 'erro_consecutivo' : \n                      'pediu_humano'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -944,
+        1600
+      ],
+      "id": "4fc1bbbe-5f71-4e1a-a820-4ba15ff6a855",
+      "name": "Detector de Erros Consecutivos"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "flag-escalar",
+              "leftValue": "={{ $json.escalar }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "erros-consecutivos",
+              "leftValue": "={{ $json.total_erros }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "tool-escalar",
+              "leftValue": "={{ $json.tool_chamada }}",
+              "rightValue": "escalar_atendimento",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": false
+              }
+            },
+            {
+              "id": "palavras-humano",
+              "leftValue": "={{ $json.mensagem_original }}",
+              "rightValue": "falar com atendente|falar com pessoa|quero falar com alguém|me passa para humano|atendente humano|preciso de ajuda|atendimento humano|conversar com vendedor",
+              "operator": {
+                "type": "string",
+                "operation": "contains",
+                "caseSensitive": false
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "0188e9f4-0f44-44d5-b7b5-8b665611a8c6",
+      "name": "Precisa Escalar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        1856
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "JNHZ1OHjpKxUUdu5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/JNHZ1OHjpKxUUdu5",
+          "cachedResultName": "escalar_para_humano"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "descricao",
+              "displayName": "descricao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contexto",
+              "displayName": "contexto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -736,
+        1600
+      ],
+      "id": "1a3eaa85-61b6-4f9a-bc9a-36d79b225b05",
+      "name": "Call 'escalar_para_humano'"
+    },
+    {
+      "parameters": {
+        "description": "Utilize essa tool para transferir a conversa com um cliente para um humano especializado da Roça Capital.\nUtilize caso tenha dúvidas, não souber responder ou o cliente peça algo que está fora do seu escopo.",
+        "workflowId": {
+          "__rl": true,
+          "value": "JNHZ1OHjpKxUUdu5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/JNHZ1OHjpKxUUdu5",
+          "cachedResultName": "escalar_para_humano"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefone": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('telefone', ``, 'string') }}",
+            "motivo": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('motivo', ``, 'string') }}",
+            "descricao": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('descricao', ``, 'string') }}",
+            "contexto": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('contexto', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "descricao",
+              "displayName": "descricao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contexto",
+              "displayName": "contexto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -288,
+        2816
+      ],
+      "id": "b375ce55-9233-4d58-b1cd-7cebd0b14340",
+      "name": "Call 'escalar_para_humano'1"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n-n8n.yitvhs.easypanel.host",
+            "user-agent": "Mozilla/5.0 (iPad; CPU OS 13_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/111.0 Mobile/15E148 Safari/605.1.15",
+            "content-length": "925",
+            "accept-encoding": "gzip",
+            "content-type": "application/json; charset=utf-8",
+            "origin": "https://api.z-api.io",
+            "server": "Z-API",
+            "x-forwarded-for": "137.131.252.58",
+            "x-forwarded-host": "n8n-n8n.yitvhs.easypanel.host",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "56f69c926953",
+            "x-real-ip": "137.131.252.58",
+            "z-api-token": "B6E82D6B4967DFAD363845FD"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "isStatusReply": false,
+            "chatLid": "122763218055413@lid",
+            "connectedPhone": "553195879661",
+            "waitingMessage": false,
+            "isEdit": false,
+            "isGroup": false,
+            "isNewsletter": false,
+            "instanceId": "3EA7C82741282290CFAD7EDE6B443D3D",
+            "messageId": "3EB0BF7451F6C963400739",
+            "phone": "553198634058",
+            "fromMe": false,
+            "momment": 1769015585000,
+            "status": "RECEIVED",
+            "chatName": "Pedro Desenvolvedor",
+            "senderPhoto": null,
+            "senderName": "Pedro",
+            "photo": "https://pps.whatsapp.net/v/t61.24694-24/364072545_1344749253138674_3305393714783276569_n.jpg?ccb=11-4&oh=01_Q5Aa3gEaiWi4TkKBK-np_V8E_FxDB7Us8oUQNFT4knOw3en-1A&oe=697E115F&_nc_sid=5e03e0&_nc_cat=108",
+            "broadcast": false,
+            "participantLid": null,
+            "messageExpirationSeconds": 0,
+            "forwarded": false,
+            "type": "ReceivedCallback",
+            "fromApi": false,
+            "text": {
+              "message": "Não sei o Cep, moro aqui tem pouco tempo.\n\nÉ Rua paraiba, 771 Savassi"
+            },
+            "_traceContext": {
+              "traceId": "823892608e233e92e05ecdd8e614ab10",
+              "spanId": "f73233ef454f4dbf"
+            }
+          },
+          "webhookUrl": "https://n8n-n8n.yitvhs.easypanel.host/webhook/agentewhats-ecb9-46ae-9cde-7f8b138b2655",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_produtos": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resgata as mensagens na memória2": {
+      "main": [
+        [
+          {
+            "node": "Verifica se atendimento humano está ativo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória temporária para gerenciar atendimento humano": {
+      "ai_memory": [
+        [
+          {
+            "node": "Cria flag classificando atendimento humano",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "Resgata as mensagens na memória2",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica se atendimento humano está ativo": {
+      "main": [
+        [
+          {
+            "node": "Filtro Inicial1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifica se a mensagem vem do número do admin": {
+      "main": [
+        [
+          {
+            "node": "Cria flag classificando atendimento humano",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resgata as mensagens na memória2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "parametros_buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Inicial1": {
+      "main": [
+        [
+          {
+            "node": "dados_formatados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cria flag classificando atendimento humano": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Buffer 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ComparandoMensagens1": {
+      "main": [
+        [
+          {
+            "node": "Apagar Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer ": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer 3": {
+      "main": [
+        [
+          {
+            "node": "ComparandoMensagens1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Texto Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Buffer ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apagar Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Mensagem1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Audio Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Buffer ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Error Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Buffer ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add PDF Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Buffer ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Imagem Buffer1": {
+      "main": [
+        [
+          {
+            "node": "Buffer ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parametros_buffer": {
+      "main": [
+        [
+          {
+            "node": "Verifica se a mensagem vem do número do admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_ou_criar_cliente": {
+      "main": [
+        [
+          {
+            "node": "Atualizar_Ultima_Interacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Transcrever Áudio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Mensagem Texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensagem Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensagem Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensagem Documento PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensagem Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcrever Áudio": {
+      "main": [
+        [
+          {
+            "node": "Add Audio Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Add Imagem Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Texto": {
+      "main": [
+        [
+          {
+            "node": "Add Texto Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Audio": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Imagem": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File2": {
+      "main": [
+        [
+          {
+            "node": "Add PDF Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Erro": {
+      "main": [
+        [
+          {
+            "node": "Add Error Buffer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem Documento PDF1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "dados_formatados": {
+      "main": [
+        [
+          {
+            "node": "buscar_ou_criar_cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields5": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch2": {
+      "main": [
+        [
+          {
+            "node": "Enviar_texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar_imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Switch2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Atualizar_Msg_Agente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Auto-fixing Output Parser1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser [Schema]": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait4": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar_texto": {
+      "main": [
+        [
+          {
+            "node": "Wait3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Precisa Escalar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "add_to_cart": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remover_do_carrinho": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gerar_pix": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar_imagem": {
+      "main": [
+        [
+          {
+            "node": "Wait4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_historico_compra": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enviar_foto_produto": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Vector Store1": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar_Ultima_Interacao": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar_Msg_Agente": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enviar_qr_code_pix": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "salvar_endereco": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "view_cart": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gerar_pagamento": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar_Status_Pedido": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "calcular_frete": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "confirmar_frete": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detector de Erros Consecutivos": {
+      "main": [
+        [
+          {
+            "node": "Call 'escalar_para_humano'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precisa Escalar?": {
+      "main": [
+        [
+          {
+            "node": "Detector de Erros Consecutivos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'escalar_para_humano'1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "19e8c181-d445-480f-8435-3e0fd97f5828",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cac5384a884875aa74b60d516c0e5d3eea560bbc081794c4ea765037771a58c0"
+  },
+  "id": "MluN4DE8dEPPTYom",
+  "tags": [
+    {
+      "updatedAt": "2025-12-12T22:47:40.279Z",
+      "createdAt": "2025-12-12T22:47:40.279Z",
+      "id": "fZV7FGIGTPxstnGC",
+      "name": "VєяттiรLαb"
+    }
+  ]
+}

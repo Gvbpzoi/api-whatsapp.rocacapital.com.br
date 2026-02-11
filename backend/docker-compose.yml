@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build: .
+    container_name: agente-whatsapp-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://agente:agente123@postgres:5432/agente_whatsapp
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    networks:
+      - agente-network
+    restart: unless-stopped
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: agente-whatsapp-db
+    environment:
+      POSTGRES_USER: agente
+      POSTGRES_PASSWORD: agente123
+      POSTGRES_DB: agente_whatsapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - agente-network
+    restart: unless-stopped
+
+  # Redis (para sessões)
+  redis:
+    image: redis:7-alpine
+    container_name: agente-whatsapp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agente-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # n8n (opcional - se quiser rodar local)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: agente-whatsapp-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=agente
+      - DB_POSTGRESDB_PASSWORD=agente123
+    depends_on:
+      - postgres
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/backup
+    networks:
+      - agente-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+
+networks:
+  agente-network:
+    driver: bridge

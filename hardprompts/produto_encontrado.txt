@@ -1,0 +1,32 @@
+Encontrei {total} {produto_palavra} {termo_busca_highlight}! {emoji}
+
+{lista_produtos}
+
+{call_to_action}
+
+---
+Variables:
+- total: Número de produtos encontrados
+- produto_palavra: "produto" (singular) ou "produtos" (plural)
+- termo_busca_highlight: Destaque do termo buscado
+- emoji: 🧀 (queijos), ☕ (cafés), 🍯 (doces), ✨ (geral)
+- lista_produtos: Lista formatada dos produtos
+- call_to_action: Pergunta para engajar ("Qual te interessa?", "Quer adicionar algum?")
+
+Exemplo:
+"Encontrei 3 queijos Canastra deliciosos! 🧀
+
+1️⃣ Queijo Canastra Meia-Cura 500g
+   💰 R$ 45,00
+   📦 15 unidades disponíveis
+   ⭐ Nosso mais vendido!
+
+2️⃣ Queijo Canastra Curado 500g
+   💰 R$ 52,00
+   📦 8 unidades disponíveis
+
+3️⃣ Queijo Canastra Fresco 500g
+   💰 R$ 38,00
+   📦 20 unidades disponíveis
+
+Qual deles te interessa? 😊"

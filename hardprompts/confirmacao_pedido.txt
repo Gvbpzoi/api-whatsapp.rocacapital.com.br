@@ -1,0 +1,60 @@
+✅ Pedido #{numero_pedido} Criado com Sucesso!
+
+📦 Resumo:
+━━━━━━━━━━━━━━━━━
+{itens_lista}
+📍 Frete ({tipo_frete}) - R$ {valor_frete}
+━━━━━━━━━━━━━━━━━
+💰 Total: R$ {valor_total}
+
+💳 Pagamento: {metodo_pagamento}
+
+{instrucoes_pagamento}
+
+{mensagem_final}
+
+---
+Variables:
+- numero_pedido: Número do pedido
+- itens_lista: Lista formatada dos itens
+- tipo_frete: "Lalamove", "Correios PAC", "Correios SEDEX", "Retirada na loja"
+- valor_frete: Valor do frete formatado
+- valor_total: Valor total formatado
+- metodo_pagamento: "PIX", "Cartão de Crédito", "Dinheiro na entrega"
+- instrucoes_pagamento: Instruções específicas do método
+- mensagem_final: Mensagem de agradecimento/próximos passos
+
+Exemplo (PIX):
+"✅ Pedido #1234 Criado com Sucesso!
+
+📦 Resumo:
+━━━━━━━━━━━━━━━━━
+🧀 Queijo Canastra 500g (2x) - R$ 90,00
+🍯 Doce de Leite 300g (1x) - R$ 18,00
+📍 Frete (Lalamove) - R$ 15,00
+━━━━━━━━━━━━━━━━━
+💰 Total: R$ 123,00
+
+💳 Pagamento: PIX
+
+[QR CODE]
+
+Ou copie e cole:
+00020126580014br.gov.bcb.pix...
+
+⏰ Válido por 30 minutos
+
+Assim que o pagamento for confirmado, você receberá um aviso e o pedido entrará em preparação! 🚀"
+
+Exemplo (Cartão):
+"✅ Pedido #1234 Criado com Sucesso!
+
+📦 Total: R$ 123,00
+💳 Pagamento: Cartão de Crédito (3x de R$ 41,00)
+
+🔗 Link para pagamento:
+https://pagar.me/checkout/abc123
+
+Clique no link, preencha os dados do cartão e pronto!
+
+O link expira em 3 horas."

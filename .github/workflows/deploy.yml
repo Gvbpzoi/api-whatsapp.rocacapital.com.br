@@ -1,0 +1,119 @@
+name: Deploy to Hostinger/EasyPanel
+
+on:
+  push:
+    branches:
+      - main
+      - production
+  workflow_dispatch:  # Permite trigger manual
+
+env:
+  DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGE_NAME: agente-whatsapp
+
+jobs:
+  # Job 1: Build e Push da imagem Docker
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extrair metadados
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agente-whatsapp
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build e Push imagem
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job 2: Deploy no Hostinger via SSH
+  deploy:
+    name: Deploy to Hostinger
+    runs-on: ubuntu-latest
+    needs: build
+
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_PORT || 22 }}
+          script: |
+            cd /var/www/agente-whatsapp
+
+            # Pull código atualizado
+            git pull origin main
+
+            # Pull nova imagem Docker
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            docker pull ghcr.io/${{ github.repository_owner }}/agente-whatsapp:latest
+
+            # Restart serviços
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
+
+            # Limpar imagens antigas
+            docker image prune -af
+
+  # Job 3: Health Check pós-deploy
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - name: Aguardar 30s para serviço iniciar
+        run: sleep 30
+
+      - name: Verificar API está online
+        run: |
+          curl -f https://api.seudominio.com/ || exit 1
+
+      - name: Notificar sucesso
+        if: success()
+        run: |
+          echo "✅ Deploy realizado com sucesso!"
+          # TODO: Adicionar notificação Slack/Discord/Email
+
+      - name: Notificar falha
+        if: failure()
+        run: |
+          echo "❌ Deploy falhou! Verificar logs."
+          # TODO: Adicionar notificação de falha

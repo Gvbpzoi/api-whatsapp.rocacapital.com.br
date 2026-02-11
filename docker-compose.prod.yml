@@ -1,0 +1,125 @@
+# Docker Compose para Produção (Hostinger/EasyPanel)
+# Otimizado para deploy em servidor
+
+version: '3.8'
+
+services:
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_REGISTRY}/agente-whatsapp:${VERSION:-latest}
+    container_name: agente-whatsapp-api
+    restart: unless-stopped
+
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+    environment:
+      # Supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+
+      # Tiny ERP V3 (OAuth)
+      - TINY_CLIENT_ID=${TINY_CLIENT_ID}
+      - TINY_CLIENT_SECRET=${TINY_CLIENT_SECRET}
+      - TINY_ACCESS_TOKEN=${TINY_ACCESS_TOKEN}
+      - TINY_REFRESH_TOKEN=${TINY_REFRESH_TOKEN}
+
+      # Tiny ERP V2 (fallback)
+      - TINY_V2_TOKEN=${TINY_V2_TOKEN}
+
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Pagar.me
+      - PAGARME_API_KEY=${PAGARME_API_KEY}
+      - PAGARME_SECRET_KEY=${PAGARME_SECRET_KEY}
+
+      # Config
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AUTO_RESUME_TIMEOUT=300
+
+    volumes:
+      - ./backend/logs:/app/logs
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - agente-network
+
+    # Limites de recursos (ajustar conforme plano Hostinger)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis para cache de sessões
+  redis:
+    image: redis:7-alpine
+    container_name: agente-whatsapp-redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+    volumes:
+      - redis_data:/data
+
+    networks:
+      - agente-network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # n8n para workflows (opcional - pode rodar separado)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: agente-whatsapp-n8n
+    restart: unless-stopped
+
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - N8N_HOST=${N8N_HOST:-n8n.seudominio.com}
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://${N8N_HOST:-n8n.seudominio.com}
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/backup
+
+    networks:
+      - agente-network
+
+    # Opcional - desabilite se n8n rodar separadamente
+    profiles:
+      - with-n8n
+
+volumes:
+  redis_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  agente-network:
+    driver: bridge

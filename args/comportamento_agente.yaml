@@ -1,0 +1,134 @@
+# Configurações de Comportamento do Agente - Roça Capital
+
+# Personalidade do Bot
+personalidade:
+  tom: "amigável"  # formal, informal, amigável, profissional
+  emojis: true
+  emojis_por_mensagem: 2  # Máximo de emojis por mensagem
+  linguagem: "pt-BR"
+  tratamento: "você"  # você, tu, senhor/senhora
+
+# Estilo de Resposta
+estilo_resposta:
+  tamanho_preferido: "medio"  # curto, medio, longo
+  max_caracteres: 1000
+  usar_listas: true
+  usar_numeros: true  # 1️⃣, 2️⃣, 3️⃣
+  usar_separadores: true  # ━━━━━━
+
+# Proatividade
+proatividade:
+  sugerir_produtos: true
+  sugerir_combos: true
+  avisar_promocoes: false  # Não ser muito agressivo
+  perguntar_avaliacao: true  # Após pedido entregue
+
+# Limites Operacionais
+limites:
+  max_produtos_busca: 10
+  max_itens_carrinho: 20
+  max_tentativas_pagamento: 3
+  timeout_sessao: 7200  # 2 horas (segundos)
+
+# Session Manager
+session_manager:
+  auto_resume_timeout: 300  # 5 minutos (segundos)
+
+  human_indicators:
+    - "[HUMANO]"
+    - "[ATENDENTE]"
+    - "[MANUAL]"
+    - "[H]"
+
+  commands:
+    - "/pausar"
+    - "/retomar"
+    - "/assumir"
+    - "/liberar"
+    - "/status"
+    - "/help"
+
+  log_transitions: true
+
+# Tratamento de Erros
+erro_handling:
+  max_retries: 3
+  backoff_exponential: true
+  mensagem_erro_amigavel: true
+  notificar_admin_apos: 5  # Após 5 erros seguidos
+
+# Validações
+validacoes:
+  validar_cpf: false  # Não obrigatório
+  validar_telefone: true
+  validar_cep: true
+  validar_email: false  # Não obrigatório
+
+# Features Ativas
+features:
+  busca_produtos: true
+  gestao_carrinho: true
+  calculo_frete: true
+  finalizacao_pedido: true
+  consulta_pedido: true
+  rastreamento: true
+  controle_humano_agente: true
+
+  # Features futuras (desativadas)
+  programa_fidelidade: false
+  cupons_desconto: false
+  cashback: false
+  assinatura_produtos: false
+
+# Integrações
+integracoes:
+  tiny_erp:
+    ativo: true
+    usar_v3: true
+    fallback_v2: true
+
+  supabase:
+    ativo: true
+    usar_como_cache: true
+
+  pagarme:
+    ativo: true
+    metodos:
+      - "pix"
+      - "cartao_credito"
+
+  whatsapp:
+    ativo: true
+    enviar_imagens: true
+    enviar_audios: false
+    enviar_videos: false
+    enviar_documentos: true
+
+# Horário de Atendimento Bot
+horario_atendimento:
+  sempre_ativo: true  # Bot sempre responde
+  horario_comercial: "07:00-18:00"
+  fora_horario_msg: "No momento estamos fora do horário comercial, mas você pode fazer seu pedido e processaremos assim que possível!"
+
+# Mensagens Automáticas
+mensagens_automaticas:
+  boas_vindas_primeira_vez: true
+  confirmacao_pedido: true
+  atualizacao_status: true
+  produto_enviado: true
+  produto_entregue: true
+  solicitar_avaliacao: true  # 24h após entrega
+
+# Analytics
+analytics:
+  rastrear_buscas: true
+  rastrear_conversoes: true
+  rastrear_abandono_carrinho: true
+  enviar_metricas: true
+
+# Debug
+debug:
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_all_messages: false
+  log_tool_calls: true
+  log_errors_only: false

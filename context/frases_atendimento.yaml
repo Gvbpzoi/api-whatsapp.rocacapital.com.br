@@ -1,0 +1,104 @@
+# Frases Padrão de Atendimento - Roça Capital
+
+# Saudações por horário
+saudacoes:
+  manha:  # 6h-12h
+    - "Bom dia! ☀️"
+    - "Bom dia! Como vai?"
+    - "Oi, bom dia! 😊"
+
+  tarde:  # 12h-18h
+    - "Boa tarde! 🌤️"
+    - "Boa tarde! Tudo bem?"
+    - "Oi, boa tarde! 😊"
+
+  noite:  # 18h-23h
+    - "Boa noite! 🌙"
+    - "Boa noite! Como está?"
+    - "Oi, boa noite! 😊"
+
+# Apresentação (cliente novo)
+apresentacao:
+  formal: "Seja bem-vindo à Roça Capital! 🌾 Somos uma loja especializada em produtos artesanais mineiros no Mercado Central de BH. Como posso ajudar você hoje?"
+
+  informal: "Oi! Bem-vindo à Roça Capital! 😊 Temos queijos, cachaças, doces, cafés e muito mais, tudo artesanal e mineiro! O que você procura?"
+
+# Cliente conhecido
+retorno_cliente:
+  com_historico: "Oi {nome}! Que bom te ver por aqui de novo! 😊 Da última vez você comprou {produto}. Como posso ajudar hoje?"
+
+  sem_historico_recente: "Oi {nome}! Tudo bem? Em que posso ajudar você hoje?"
+
+# Produtos encontrados
+produtos_encontrados:
+  singular: "Encontrei 1 produto perfeito para você! 🎯"
+  plural: "Encontrei {total} produtos que combinam com o que você procura! ✨"
+
+# Produtos não encontrados
+produtos_nao_encontrados:
+  generico: "Ops! Não encontrei '{termo}' em nosso estoque no momento. 😅"
+
+  com_sugestao: "Não encontrei exatamente '{termo}', mas temos produtos similares que podem te interessar:"
+
+  sem_resultados: "Infelizmente não temos '{termo}' no momento. Mas temos muitas outras delícias! Quer conhecer?"
+
+# Carrinho
+carrinho:
+  item_adicionado: "✅ Adicionei ao carrinho!"
+  carrinho_vazio: "Seu carrinho está vazio! 🛒 Que tal começar escolhendo alguns produtos?"
+  carrinho_atualizado: "✅ Carrinho atualizado!"
+
+# Frete
+frete:
+  calculando: "Deixa eu calcular o frete para você... ⏳"
+  opcoes_disponiveis: "📦 Temos {total} opções de entrega:"
+  frete_confirmado: "✅ Frete confirmado!"
+
+# Pedido
+pedido:
+  criando: "Preparando seu pedido... ⏳"
+  criado_sucesso: "✅ Pedido #{numero} criado com sucesso!"
+  aguardando_pagamento: "⏳ Aguardando confirmação do pagamento..."
+  pagamento_confirmado: "✅ Pagamento confirmado! Seu pedido entrou em preparação! 🚀"
+
+# Erro genérico
+erros:
+  generico: "Ops! Algo deu errado. 😅 Pode tentar de novo?"
+
+  temporario: "Nosso sistema está um pouquinho lento agora. Pode aguardar uns segundinhos?"
+
+  indisponivel: "Este serviço está temporariamente indisponível. Tente novamente em alguns minutos!"
+
+# Despedida
+despedidas:
+  - "Até logo! 👋"
+  - "Até mais! Volte sempre! 😊"
+  - "Foi um prazer te ajudar! Até breve! 🌟"
+  - "Obrigado! Qualquer coisa, estou aqui! 💚"
+
+# Agradecimentos
+agradecimentos:
+  - "Por nada! 😊"
+  - "Sempre às ordens! 🙌"
+  - "Fico feliz em ajudar! 💚"
+  - "É um prazer! 😊"
+
+# Cliente solicita humano
+solicita_humano:
+  - "Claro! Vou chamar um atendente humano para você. Um momento! ⏰"
+  - "Sem problemas! Já estou conectando você com um dos nossos atendentes. ⏰"
+  - "Pode deixar! Um atendente já vai falar com você. Aguarde só um instantinho! ⏰"
+
+# Bot retoma após humano
+retoma_apos_humano:
+  - "Oi! Voltei para continuar te ajudando. 😊 Em que posso ajudar?"
+  - "Oi de novo! Posso te ajudar com mais alguma coisa?"
+  - "Estou de volta! Precisa de algo mais?"
+
+# Confirmações
+confirmacoes:
+  - "Perfeito!"
+  - "Ótimo!"
+  - "Entendido!"
+  - "Pode deixar!"
+  - "Combinado!"

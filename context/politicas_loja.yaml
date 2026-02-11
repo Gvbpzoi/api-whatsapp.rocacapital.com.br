@@ -1,0 +1,138 @@
+# Políticas da Loja - Roça Capital
+
+# Informações Gerais
+loja:
+  nome: "Roça Capital"
+  localizacao: "Mercado Central de Belo Horizonte - Box 245"
+  endereco_completo: "Av. Augusto de Lima, 744 - Centro, Belo Horizonte - MG, 30190-922"
+  telefone: "(31) 3274-9999"
+  whatsapp: "(31) 99999-9999"
+  email: "contato@rocacapital.com.br"
+  site: "www.rocacapital.com.br"
+
+# Horário de Funcionamento
+horario_funcionamento:
+  segunda_a_sabado: "7h às 18h"
+  domingo: "7h às 13h"
+  feriados: "Consultar"
+
+  obs: "Pedidos por WhatsApp podem ser feitos 24h, mas serão processados no horário comercial"
+
+# Política de Entrega
+entrega:
+  areas_atendidas:
+    - "Belo Horizonte (todas as regiões)"
+    - "Contagem"
+    - "Betim"
+    - "Nova Lima"
+    - "Sabará"
+
+  prazo_minimo: "1-2 horas (Lalamove)"
+  prazo_maximo: "7 dias úteis (Correios PAC)"
+
+  valor_minimo_frete_gratis: 150.00
+  obs_frete_gratis: "Frete grátis apenas para BH (região metropolitana)"
+
+  retirada_loja:
+    disponivel: true
+    prazo_preparacao: "30 minutos"
+    horario: "Segunda a sábado: 7h às 18h"
+
+# Política de Pagamento
+pagamento:
+  metodos_aceitos:
+    - "PIX (instantâneo)"
+    - "Cartão de Crédito (até 3x sem juros)"
+    - "Cartão de Débito"
+    - "Dinheiro (na entrega ou retirada)"
+
+  parcela_minima: 30.00
+  obs: "PIX tem desconto de 5% em pedidos acima de R$ 100"
+
+# Política de Troca e Devolução
+troca_devolucao:
+  prazo: "7 dias corridos"
+
+  condicoes:
+    - "Produto na embalagem original"
+    - "Lacre intacto (produtos alimentícios)"
+    - "Nota fiscal"
+
+  produtos_nao_aceitos:
+    - "Produtos perecíveis já abertos"
+    - "Produtos com prazo de validade próximo ao vencimento (comprados assim)"
+
+  como_solicitar: "Entre em contato pelo WhatsApp ou telefone"
+
+# Política de Nota Fiscal
+nota_fiscal:
+  emissao: "Automática para todos os pedidos"
+  envio: "Por email após confirmação do pagamento"
+  cpf_cnpj: "Opcional (se quiser na nota, informar antes do pagamento)"
+
+# Garantia de Qualidade
+qualidade:
+  origem: "Todos os produtos são de produtores locais certificados"
+  validade: "Sempre informada na embalagem"
+  armazenamento: "Seguimos as melhores práticas de armazenamento"
+
+  problemas:
+    contato: "Se houver qualquer problema com o produto, entre em contato imediatamente"
+    resolucao: "Troca ou devolução do valor em até 24h"
+
+# Programa de Fidelidade (futuro)
+fidelidade:
+  ativo: false
+  previsao: "Em breve!"
+  descricao: "Acumule pontos a cada compra e troque por descontos"
+
+# Política de Privacidade
+privacidade:
+  dados_coletados:
+    - "Nome, telefone, endereço (para entrega)"
+    - "CPF (opcional, para nota fiscal)"
+    - "Histórico de compras (para melhorar recomendações)"
+
+  uso_dados: "Apenas para processar pedidos e melhorar sua experiência"
+  compartilhamento: "Nunca compartilhamos seus dados com terceiros"
+  opt_out: "Você pode solicitar exclusão dos seus dados a qualquer momento"
+
+# Perguntas Frequentes
+faq:
+  - pergunta: "Vocês entregam fora de BH?"
+    resposta: "Sim! Enviamos para todo o Brasil via Correios"
+
+  - pergunta: "Posso pagar na entrega?"
+    resposta: "Sim, aceitamos dinheiro na entrega (apenas para BH e região)"
+
+  - pergunta: "Os produtos são artesanais mesmo?"
+    resposta: "Sim! Trabalhamos com produtores locais certificados e visitamos regularmente"
+
+  - pergunta: "Tem produtos veganos?"
+    resposta: "Sim! Temos queijos veganos, geleias, cafés e outros produtos plant-based"
+
+  - pergunta: "Posso visitar a loja?"
+    resposta: "Claro! Estamos no Box 245 do Mercado Central de BH. Segunda a sábado, 7h às 18h"
+
+  - pergunta: "Como sei se o produto está fresco?"
+    resposta: "Sempre informamos a validade. Produtos perecíveis são repostos diariamente"
+
+# Mensagens de Marketing (usar com moderação)
+marketing:
+  promocoes:
+    ativo: true
+    periodicidade: "Promoções especiais toda quinta-feira"
+    aviso: "Fique de olho! 👀"
+
+  novidades:
+    ativo: true
+    aviso: "Temos produtos novos toda semana!"
+
+  cestas:
+    disponiveis: true
+    tipos:
+      - "Cesta Mineira Tradicional"
+      - "Cesta Gourmet"
+      - "Cesta Café da Manhã"
+      - "Cesta Presente"
+    personalizacao: "Podemos montar cestas personalizadas!"

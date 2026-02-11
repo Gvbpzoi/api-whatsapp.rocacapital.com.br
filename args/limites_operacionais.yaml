@@ -1,0 +1,163 @@
+# Limites Operacionais - Roça Capital
+
+# Rate Limits (APIs)
+rate_limits:
+  tiny_api:
+    requests_per_minute: 60
+    requests_per_hour: 1000
+    cooldown_on_limit: 60  # segundos
+
+  supabase_api:
+    requests_per_minute: 1000  # Praticamente ilimitado
+    requests_per_hour: 50000
+
+  whatsapp_api:
+    messages_per_second: 15
+    messages_per_minute: 60
+    messages_per_hour: 1000
+
+  pagarme_api:
+    requests_per_minute: 30
+    requests_per_hour: 500
+
+# Timeouts
+timeouts:
+  tiny_api: 10  # segundos
+  supabase_api: 5  # segundos
+  whatsapp_api: 15  # segundos
+  pagarme_api: 30  # segundos
+  default: 10  # segundos
+
+# Limites de Negócio
+negocio:
+  pedido:
+    valor_minimo: 20.00  # R$
+    valor_maximo: 5000.00  # R$
+    max_itens: 50
+    max_peso: 30.0  # kg
+
+  carrinho:
+    max_itens: 20
+    tempo_expiracao: 86400  # 24 horas (segundos)
+    limpar_automaticamente: true
+
+  frete:
+    valor_minimo_frete_gratis: 150.00  # R$
+    peso_maximo_lalamove: 20.0  # kg
+    peso_maximo_correios: 30.0  # kg
+
+  pagamento:
+    timeout_pix: 1800  # 30 minutos (segundos)
+    timeout_cartao: 10800  # 3 horas (segundos)
+    max_tentativas: 3
+
+# Limites de Comunicação
+comunicacao:
+  max_mensagens_por_sessao: 100
+  max_caracteres_por_mensagem: 1000
+  max_imagens_por_sessao: 10
+
+  # Anti-spam
+  min_intervalo_mensagens: 1  # segundo
+  max_mensagens_repetidas: 3
+  bloquear_spam: true
+  tempo_bloqueio_spam: 300  # 5 minutos (segundos)
+
+# Limites de Busca
+busca:
+  max_resultados: 20
+  min_caracteres_busca: 2
+  max_caracteres_busca: 100
+
+  # Cache
+  cache_busca: true
+  cache_ttl: 300  # 5 minutos (segundos)
+
+# Limites de Sessão
+sessao:
+  max_sessoes_simultaneas_por_telefone: 1
+  tempo_inatividade: 7200  # 2 horas (segundos)
+  limpar_sessoes_antigas: true
+  idade_maxima_sessao: 86400  # 24 horas (segundos)
+
+# Limites de Estoque
+estoque:
+  reservar_estoque_em_carrinho: false  # Não reservar (por enquanto)
+  tempo_reserva: 1800  # 30 minutos (se ativar)
+  alertar_estoque_baixo: true
+  threshold_estoque_baixo: 5  # unidades
+
+# Limites de Memória
+memoria:
+  max_historico_mensagens: 50  # Por sessão
+  max_buscas_salvas: 100  # Por cliente
+  max_preferencias_salvas: 20  # Por cliente
+  tempo_retencao_dados: 15552000  # 180 dias (segundos)
+
+# Limites de Arquivo
+arquivos:
+  max_tamanho_imagem: 5242880  # 5 MB (bytes)
+  max_tamanho_documento: 10485760  # 10 MB (bytes)
+  formatos_aceitos_imagem:
+    - "jpg"
+    - "jpeg"
+    - "png"
+    - "webp"
+  formatos_aceitos_documento:
+    - "pdf"
+    - "doc"
+    - "docx"
+
+# Proteções de Segurança
+seguranca:
+  validar_inputs: true
+  sanitizar_strings: true
+  rate_limit_por_ip: true
+  rate_limit_por_telefone: true
+
+  # Detecção de fraude (básico)
+  detectar_pedidos_suspeitos: true
+  alertar_valor_alto: 1000.00  # R$
+  alertar_muitos_pedidos: 5  # Por dia
+  alertar_enderecos_diferentes: 3  # Endereços diferentes em 24h
+
+# Monitoramento
+monitoramento:
+  alertar_admin_se:
+    erro_rate: 0.05  # 5% de erro
+    timeout_rate: 0.10  # 10% de timeout
+    pedidos_falhos_seguidos: 3
+    api_indisponivel: true
+    estoque_critico: true
+
+  metricas_tempo_real: true
+  dashboard_url: "https://grafana.seudominio.com"
+
+# Backups
+backups:
+  backup_automatico: true
+  frequencia_backup_carrinho: 3600  # 1 hora (segundos)
+  frequencia_backup_sessao: 1800  # 30 minutos (segundos)
+  retention_backup: 604800  # 7 dias (segundos)
+
+# Retry Strategies
+retry:
+  max_tentativas: 3
+  backoff_inicial: 1  # segundo
+  backoff_multiplicador: 2  # Exponencial
+  backoff_maximo: 60  # segundos
+
+  retry_on:
+    - "ConnectionError"
+    - "Timeout"
+    - "RateLimitError"
+    - "503"  # Service Unavailable
+    - "504"  # Gateway Timeout
+
+  nao_retry_on:
+    - "ValidationError"
+    - "AuthenticationError"
+    - "400"  # Bad Request
+    - "401"  # Unauthorized
+    - "403"  # Forbidden
+    - "404"  # Not Found

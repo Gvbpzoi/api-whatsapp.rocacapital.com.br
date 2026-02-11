@@ -1,0 +1,116 @@
+{
+  "name": "WhatsApp Webhook Simplificado",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "id": "webhook-whatsapp",
+      "name": "Webhook WhatsApp",
+      "webhookId": "whatsapp-inbound"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatar dados para o backend\nconst incoming = $input.first().json;\n\nreturn [{\n  json: {\n    phone: incoming.phone || incoming.from,\n    message: incoming.message || incoming.text,\n    sender_type: \"customer\",  // Sempre customer vindo do WhatsApp\n    metadata: {\n      timestamp: new Date().toISOString(),\n      source: \"n8n-webhook\"\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "id": "format-data",
+      "name": "Formatar Dados"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/webhook/whatsapp",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "id": "send-to-backend",
+      "name": "Enviar para Backend"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_respond }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "id": "check-should-respond",
+      "name": "Deve Responder?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { message: $json.response, status: 'sent' } }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 200],
+      "id": "respond-yes",
+      "name": "Responder ao WhatsApp"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { message: 'Humano atendendo', status: 'skipped', reason: $json.reason } }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 400],
+      "id": "respond-no",
+      "name": "Não Responder"
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [[{ "node": "Formatar Dados", "type": "main", "index": 0 }]]
+    },
+    "Formatar Dados": {
+      "main": [[{ "node": "Enviar para Backend", "type": "main", "index": 0 }]]
+    },
+    "Enviar para Backend": {
+      "main": [[{ "node": "Deve Responder?", "type": "main", "index": 0 }]]
+    },
+    "Deve Responder?": {
+      "main": [
+        [{ "node": "Responder ao WhatsApp", "type": "main", "index": 0 }],
+        [{ "node": "Não Responder", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "meta": {
+    "instanceId": "exemplo"
+  }
+}

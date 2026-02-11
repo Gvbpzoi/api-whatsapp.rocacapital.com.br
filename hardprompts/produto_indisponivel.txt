@@ -1,0 +1,40 @@
+Ops! Não encontrei "{termo_busca}" em nosso estoque no momento. 😅
+
+{sugestoes_alternativas}
+
+{call_to_action}
+
+---
+Variables:
+- termo_busca: Termo que o cliente buscou
+- sugestoes_alternativas: Produtos similares ou populares
+- call_to_action: Pergunta para continuar a conversa
+
+Exemplo 1 (com sugestões):
+"Ops! Não encontrei "caviar" em nosso estoque no momento. 😅
+
+Mas temos outros produtos especiais que você pode gostar:
+
+🌟 Mel de Abelha Jataí (produto premium) - R$ 85,00
+🌟 Geleia Artesanal de Jabuticaba - R$ 22,00
+🌟 Azeite Extra Virgem Mineiro - R$ 48,00
+
+Quer conhecer algum desses?"
+
+Exemplo 2 (sem sugestões específicas):
+"Ops! Não encontrei "produto X" no momento. 😅
+
+Mas temos muitas outras delícias! Que tal dar uma olhada em:
+- 🧀 Queijos artesanais
+- 🍯 Doces e geleias
+- ☕ Cafés especiais
+- 🥃 Cachaças premiadas
+
+O que te interessa mais?"
+
+Exemplo 3 (produto temporariamente indisponível):
+"Ops! O {produto} está temporariamente indisponível. 😅
+
+Mas temos boas notícias! Recebemos nova remessa na próxima semana.
+
+Quer que eu te avise quando chegar? 📲"

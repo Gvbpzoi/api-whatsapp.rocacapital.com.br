@@ -1,0 +1,90 @@
+# Produtos em Destaque - Roça Capital
+
+produtos_destaque:
+  - id: "queijo_canastra_meia_cura"
+    nome: "Queijo Canastra Meia-Cura 500g"
+    categoria: "queijos"
+    preco_medio: 45.00
+    popularidade: "alta"
+    descricao_curta: "Nosso queijo mais vendido! Sabor marcante e textura perfeita."
+    tags:
+      - "bestseller"
+      - "artesanal"
+      - "mineiro"
+
+  - id: "doce_leite_tradicional"
+    nome: "Doce de Leite Tradicional 300g"
+    categoria: "doces"
+    preco_medio: 18.00
+    popularidade: "alta"
+    descricao_curta: "Cremoso e autêntico, feito com leite fresco da região."
+    tags:
+      - "tradicional"
+      - "caseiro"
+
+  - id: "cachaca_artesanal"
+    nome: "Cachaça Artesanal Ouro 700ml"
+    categoria: "bebidas"
+    preco_medio: 65.00
+    popularidade: "média"
+    descricao_curta: "Cachaça premiada, envelhecida em barris de carvalho."
+    tags:
+      - "premium"
+      - "premiada"
+
+  - id: "cafe_serra_canastra"
+    nome: "Café Torrado Moído Serra da Canastra 500g"
+    categoria: "bebidas"
+    preco_medio: 32.00
+    popularidade: "alta"
+    descricao_curta: "Café especial, colhido e torrado na região da Canastra."
+    tags:
+      - "gourmet"
+      - "especial"
+
+  - id: "mel_jatai"
+    nome: "Mel de Abelha Jataí 250g"
+    categoria: "doces"
+    preco_medio: 85.00
+    popularidade: "baixa"
+    descricao_curta: "Mel raro e especial, produto premium."
+    tags:
+      - "premium"
+      - "raro"
+      - "medicinal"
+
+# Produtos para upsell/cross-sell
+combos_sugeridos:
+  queijos:
+    - "doce_leite_tradicional"
+    - "mel_jatai"
+    - "geleia_artesanal"
+
+  cachacas:
+    - "limao_tahiti"
+    - "acucar_mascavo"
+    - "gelo_saquinho"
+
+  cafes:
+    - "bolacha_sequilho"
+    - "queijo_minas_frescal"
+    - "pao_queijo"
+
+# Produtos sazonais
+sazonalidade:
+  junho_julho:  # Festa Junina
+    - "pamonha"
+    - "curau"
+    - "quentao"
+    - "vinho_quente"
+
+  dezembro:  # Natal
+    - "chester"
+    - "tender"
+    - "panetone_artesanal"
+    - "cesta_natalina"
+
+  pascoa:  # Páscoa
+    - "bacalhau"
+    - "ovo_chocolate_artesanal"
+    - "peixe_fresco"

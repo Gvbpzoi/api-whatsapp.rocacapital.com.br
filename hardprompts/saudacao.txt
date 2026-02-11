@@ -1,0 +1,37 @@
+{saudacao} {nome}! {emoji}
+
+{apresentacao}
+
+{contexto_historico}
+
+Como posso ajudar você hoje?
+
+---
+Variables:
+- saudacao: "Bom dia", "Boa tarde", "Boa noite" (baseado no horário)
+- nome: Nome do cliente ou "Cliente" se novo
+- emoji: ☀️ (manhã), 🌤️ (tarde), 🌙 (noite), 😊 (padrão)
+- apresentacao: Texto de apresentação (apenas para clientes novos)
+- contexto_historico: Menção à última compra (apenas para clientes conhecidos)
+
+Exemplos:
+1. Cliente novo (manhã):
+   "Bom dia! ☀️
+
+   Seja bem-vindo à Roça Capital! 🌾 Somos uma loja especializada em produtos artesanais mineiros no Mercado Central de BH.
+
+   Como posso ajudar você hoje?"
+
+2. Cliente conhecido (tarde):
+   "Boa tarde, João! 🌤️
+
+   Vi que você comprou queijo canastra conosco em janeiro. Gostou?
+
+   Como posso ajudar você hoje?"
+
+3. Cliente retornando (noite):
+   "Boa noite de novo, Maria! 🌙
+
+   Vi que você estava olhando nossos queijos mais cedo. Ainda posso ajudar com isso?
+
+   (Seu carrinho com 2 itens ainda está aqui, caso queira continuar!)"

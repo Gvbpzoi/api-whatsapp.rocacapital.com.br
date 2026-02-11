@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  api:
+    build: ./backend
+    container_name: agente-whatsapp-api
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - TINY_TOKEN=${TINY_TOKEN:-}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./goals:/app/goals:ro
+      - ./context:/app/context:ro
+      - ./hardprompts:/app/hardprompts:ro
+      - ./args:/app/args:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
