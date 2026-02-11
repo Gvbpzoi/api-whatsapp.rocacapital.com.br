@@ -69,8 +69,15 @@ class ZAPIClient:
 
         try:
             logger.info(f"📤 Enviando mensagem ZAPI para {phone[:8]}...")
+            logger.debug(f"URL: {url}")
+            logger.debug(f"Payload: {payload}")
 
             response = requests.post(url, json=payload, timeout=10)
+
+            # Log da resposta antes de raise_for_status
+            logger.debug(f"Status Code: {response.status_code}")
+            logger.debug(f"Response: {response.text}")
+
             response.raise_for_status()
 
             data = response.json()
@@ -83,6 +90,11 @@ class ZAPIClient:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Erro ao enviar mensagem ZAPI: {e}")
+            try:
+                error_detail = response.json() if 'response' in locals() else {}
+                logger.error(f"Detalhes do erro: {error_detail}")
+            except:
+                pass
             return {
                 "success": False,
                 "error": str(e)
