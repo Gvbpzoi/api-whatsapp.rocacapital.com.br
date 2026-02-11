@@ -8,10 +8,12 @@ from typing import Optional, Dict, Any
 from loguru import logger
 
 from ..services.session_manager import SessionManager
+from ..services.zapi_client import get_zapi_client
 from ..models.session import MessageSource, SessionMode
 from ..orchestrator.gotcha_engine import GOTCHAEngine
 from ..orchestrator.intent_classifier import IntentClassifier
 from ..orchestrator.tools_helper import ToolsHelper
+from . import zapi_webhook
 
 
 app = FastAPI(
@@ -34,6 +36,9 @@ session_manager = SessionManager()
 gotcha_engine = None  # Inicializado no startup
 intent_classifier = None  # Inicializado no startup
 tools_helper = None  # Inicializado no startup
+
+# Incluir routers
+app.include_router(zapi_webhook.router, tags=["ZAPI"])
 
 
 # ==================== Models ====================
@@ -443,6 +448,19 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar Tools Helper: {e}")
         tools_helper = None
+
+    # Injetar singletons no router ZAPI
+    zapi_webhook.session_manager = session_manager
+    zapi_webhook.gotcha_engine = gotcha_engine
+    zapi_webhook.intent_classifier = intent_classifier
+    zapi_webhook.tools_helper = tools_helper
+
+    # Inicializar ZAPI Client
+    try:
+        zapi_client = get_zapi_client()
+        logger.info("📱 ZAPI Client inicializado")
+    except Exception as e:
+        logger.error(f"❌ Erro ao inicializar ZAPI Client: {e}")
 
 
 @app.on_event("shutdown")
