@@ -53,7 +53,7 @@ async def process_and_respond(phone: str, message: str):
         logger.info(f"📨 Processando mensagem de {phone[:8]}...")
 
         # Verificar se agente deve responder
-        session = session_manager.get_or_create_session(phone)
+        session = session_manager.get_session(phone)
 
         if session.mode != "agent":
             logger.info(f"⏸️  Agente pausado para {phone[:8]}, modo: {session.mode}")
