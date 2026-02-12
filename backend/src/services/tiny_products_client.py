@@ -75,8 +75,13 @@ class TinyProductsClient:
 
                 data = response.json()
 
+                # Log da resposta completa para debug
+                logger.debug(f"📥 Resposta Tiny: {data}")
+
                 if data.get("retorno", {}).get("status") != "OK":
+                    logger.error(f"❌ Status: {data.get('retorno', {}).get('status')}")
                     logger.error(f"❌ Erro Tiny: {data.get('retorno', {}).get('erro')}")
+                    logger.error(f"❌ Resposta completa: {data}")
                     return []
 
                 produtos_raw = data.get("retorno", {}).get("produtos", [])
