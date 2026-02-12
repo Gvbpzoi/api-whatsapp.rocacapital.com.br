@@ -21,11 +21,12 @@ class TinyProductsClient:
     def __init__(self):
         """Inicializa o cliente com credenciais do ambiente"""
         # API v2 usa token simples, não OAuth
-        self.token = os.getenv("TINY_TOKEN")
+        # Tenta TINY_API_TOKEN primeiro, depois TINY_TOKEN
+        self.token = os.getenv("TINY_API_TOKEN") or os.getenv("TINY_TOKEN")
 
         if not self.token:
-            logger.warning("⚠️ TINY_TOKEN não configurado")
-            logger.info("💡 Configure TINY_TOKEN com seu token da API v2 do Tiny")
+            logger.warning("⚠️ TINY_API_TOKEN ou TINY_TOKEN não configurado")
+            logger.info("💡 Configure uma dessas variáveis com seu token da API v2 do Tiny")
 
     def _get_headers(self) -> Dict[str, str]:
         """Retorna headers para requisições"""
