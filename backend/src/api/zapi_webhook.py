@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from loguru import logger
+import re
 
 from ..services.zapi_client import get_zapi_client
 from ..services.session_manager import SessionManager
