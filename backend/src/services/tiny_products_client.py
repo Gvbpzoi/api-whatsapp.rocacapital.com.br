@@ -188,17 +188,17 @@ class TinyProductsClient:
 
     def _normalizar_produto(self, produto: Dict) -> Dict:
         """
-        Normaliza dados do Tiny para formato Supabase
+        Normaliza dados do Tiny para formato Supabase (tabela produtos)
 
         Args:
             produto: Produto do Tiny
 
         Returns:
-            Produto normalizado
+            Produto normalizado para schema Supabase
         """
         return {
-            "tiny_id": str(produto.get("id", "")),
-            "codigo": produto.get("codigo", ""),
+            "tiny_id": int(produto.get("id", 0)),
+            "codigo": produto.get("codigo", ""),  # Mapeado para SKU no script
             "nome": produto.get("nome", ""),
             "descricao": produto.get("descricao", ""),
             "preco": float(produto.get("preco", 0) or 0),
@@ -208,24 +208,10 @@ class TinyProductsClient:
             "peso_bruto": float(produto.get("peso_bruto", 0) or 0),
             "peso_liquido": float(produto.get("peso_liquido", 0) or 0),
             "gtin": produto.get("gtin", ""),
-            "gtin_embalagem": produto.get("gtin_embalagem", ""),
             "categoria": produto.get("categoria", ""),
             "ncm": produto.get("ncm", ""),
-            "origem": produto.get("origem", ""),
             "estoque": float(produto.get("estoque", 0) or 0),
-            "estoque_minimo": float(produto.get("estoque_minimo", 0) or 0),
-            "estoque_maximo": float(produto.get("estoque_maximo", 0) or 0),
-            "situacao": produto.get("situacao", "A"),
-            "tipo": produto.get("tipo", "P"),
-            "classe_ipi": produto.get("classe_ipi", ""),
-            "codigo_beneficio": produto.get("codigo_beneficio", ""),
-            "obs": produto.get("obs", ""),
-            "garantia": produto.get("garantia", ""),
-            "cest": produto.get("cest", ""),
-            "selo_ipi": produto.get("selo_ipi", ""),
             "imagens": produto.get("imagens", []),
-            "variacoes": produto.get("variacoes", []),
-            "estoque_disponivel": float(produto.get("estoque", 0) or 0) > 0,
             "ativo": produto.get("situacao") == "A"
         }
 

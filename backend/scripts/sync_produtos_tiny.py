@@ -94,7 +94,7 @@ async def sincronizar_produtos():
             try:
                 # Verificar se produto já existe
                 cursor.execute(
-                    "SELECT id FROM produtos_site WHERE tiny_id = %s",
+                    "SELECT id FROM produtos WHERE tiny_id = %s",
                     (produto["tiny_id"],)
                 )
 
@@ -103,20 +103,24 @@ async def sincronizar_produtos():
                 if existe:
                     # Atualizar produto existente
                     cursor.execute("""
-                        UPDATE produtos_site SET
-                            codigo = %s,
+                        UPDATE produtos SET
+                            sku = %s,
                             nome = %s,
                             descricao = %s,
                             preco = %s,
                             preco_custo = %s,
                             preco_promocional = %s,
                             categoria = %s,
-                            estoque = %s,
-                            estoque_disponivel = %s,
+                            estoque_atual = %s,
                             ativo = %s,
-                            obs = %s,
                             imagens = %s,
-                            updated_at = NOW()
+                            unidade = %s,
+                            peso_kg = %s,
+                            ncm = %s,
+                            gtin = %s,
+                            fonte = %s,
+                            ultima_sync_tiny = NOW(),
+                            atualizado_em = NOW()
                         WHERE tiny_id = %s
                     """, (
                         produto["codigo"],
@@ -127,10 +131,13 @@ async def sincronizar_produtos():
                         produto["preco_promocional"],
                         produto["categoria"],
                         produto["estoque"],
-                        produto["estoque_disponivel"],
                         produto["ativo"],
-                        produto["obs"],
                         produto.get("imagens"),
+                        produto.get("unidade", "UN"),
+                        produto.get("peso_bruto", 0) or produto.get("peso_liquido", 0),
+                        produto.get("ncm", ""),
+                        produto.get("gtin", ""),
+                        "tiny",
                         produto["tiny_id"]
                     ))
                     atualizados += 1
@@ -139,13 +146,15 @@ async def sincronizar_produtos():
                 else:
                     # Inserir novo produto
                     cursor.execute("""
-                        INSERT INTO produtos_site (
-                            tiny_id, codigo, nome, descricao,
+                        INSERT INTO produtos (
+                            tiny_id, sku, nome, descricao,
                             preco, preco_custo, preco_promocional,
-                            categoria, estoque, estoque_disponivel,
-                            ativo, obs, imagens
+                            categoria, estoque_atual,
+                            ativo, imagens, unidade, peso_kg,
+                            ncm, gtin, fonte,
+                            disponivel_whatsapp, ultima_sync_tiny
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
                         )
                     """, (
                         produto["tiny_id"],
@@ -157,10 +166,14 @@ async def sincronizar_produtos():
                         produto["preco_promocional"],
                         produto["categoria"],
                         produto["estoque"],
-                        produto["estoque_disponivel"],
                         produto["ativo"],
-                        produto["obs"],
-                        produto.get("imagens")
+                        produto.get("imagens"),
+                        produto.get("unidade", "UN"),
+                        produto.get("peso_bruto", 0) or produto.get("peso_liquido", 0),
+                        produto.get("ncm", ""),
+                        produto.get("gtin", ""),
+                        "tiny",
+                        True  # disponivel_whatsapp
                     ))
                     novos += 1
                     logger.debug(f"➕ Novo: {produto['nome']}")
