@@ -42,21 +42,57 @@ async def main():
         print("❌ Erro ao buscar produto completo")
         return
 
-    # Mostrar TODOS os campos
-    print(f"\n✅ CAMPOS RETORNADOS PELA API TINY:")
+    # Mostrar TODOS os campos retornados
+    print(f"\n✅ RESPOSTA COMPLETA DA API (produto.obter.php):")
     print("=" * 80)
     print(json.dumps(produto_completo, indent=2, ensure_ascii=False))
     print("=" * 80)
 
+    # Listar TODOS os campos disponíveis
+    print(f"\n📋 CAMPOS DISPONÍVEIS ({len(produto_completo)} total):")
+    print("=" * 80)
+    for key in sorted(produto_completo.keys()):
+        value = produto_completo[key]
+        if isinstance(value, str):
+            if len(value) > 100:
+                print(f"   {key:<30} = {value[:100]}... (texto longo)")
+            else:
+                print(f"   {key:<30} = {value}")
+        elif isinstance(value, (list, dict)):
+            print(f"   {key:<30} = {type(value).__name__} com {len(value)} items")
+        else:
+            print(f"   {key:<30} = {value}")
+    print("=" * 80)
+
     # Destacar campos importantes
-    print(f"\n🔑 CAMPOS-CHAVE:")
+    print(f"\n🔑 CAMPOS CRÍTICOS PARA O BOT:")
+    print("=" * 80)
     print(f"   ID: {produto_completo.get('id')}")
+    print(f"   Código: {produto_completo.get('codigo')}")
     print(f"   Nome: {produto_completo.get('nome')}")
-    print(f"   Descrição: {produto_completo.get('descricao', '')[:100]}...")
-    print(f"   Descrição Complementar: {produto_completo.get('descricao_complementar', '')[:100]}...")
-    print(f"   URL Produto: {produto_completo.get('url_produto', 'N/A')}")
-    print(f"   Link Produto: {produto_completo.get('link_produto', 'N/A')}")
-    print(f"   Observações: {produto_completo.get('observacoes', '')[:100]}...")
+    print(f"   ")
+    print(f"   📝 DESCRIÇÕES:")
+    desc = produto_completo.get('descricao', '')
+    print(f"   - descricao: {desc[:150] if desc else 'VAZIO'}...")
+    desc_comp = produto_completo.get('descricao_complementar', '')
+    print(f"   - descricao_complementar: {desc_comp[:150] if desc_comp else 'VAZIO'}...")
+    obs = produto_completo.get('observacoes', '') or produto_completo.get('observacao', '') or produto_completo.get('obs', '')
+    print(f"   - observacoes: {obs[:150] if obs else 'VAZIO'}...")
+    print(f"   ")
+    print(f"   🔗 URLS:")
+    print(f"   - url_produto: {produto_completo.get('url_produto', 'N/A')}")
+    print(f"   - link_produto: {produto_completo.get('link_produto', 'N/A')}")
+    print(f"   ")
+    print(f"   📸 IMAGENS:")
+    imagens = produto_completo.get('imagens', [])
+    if isinstance(imagens, list) and imagens:
+        print(f"   - Total: {len(imagens)} imagens")
+        for i, img in enumerate(imagens[:3], 1):
+            if isinstance(img, dict):
+                print(f"   - Imagem {i}: {img.get('url', 'N/A')}")
+    else:
+        print(f"   - Imagens: VAZIO ou não é array")
+    print("=" * 80)
 
     # Listar TODOS os campos disponíveis
     print(f"\n📋 TODOS OS CAMPOS ({len(produto_completo)} total):")
