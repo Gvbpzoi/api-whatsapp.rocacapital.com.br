@@ -13,6 +13,7 @@ from ..services.session_manager import SessionManager
 from ..orchestrator.gotcha_engine import GOTCHAEngine
 from ..orchestrator.intent_classifier import IntentClassifier
 from ..orchestrator.tools_helper import ToolsHelper
+from . import respostas_roca_capital as resp
 
 
 router = APIRouter()
@@ -93,113 +94,79 @@ async def _process_with_agent(phone: str, message: str) -> str:
 
         # Processar baseado no intent
         if intent == "atendimento_inicial":
-            # Saudação personalizada
-            response = gotcha_engine.format_saudacao(
-                horario="manha",  # TODO: detectar horário
-                cliente_conhecido=False
-            )
+            response = resp.SAUDACAO
+
+        elif intent == "informacao_loja":
+            response = resp.INFORMACAO_LOJA
+
+        elif intent == "informacao_entrega":
+            response = resp.INFORMACAO_ENTREGA
+
+        elif intent == "retirada_loja":
+            response = resp.RETIRADA_LOJA
+
+        elif intent == "rastreamento_pedido":
+            response = resp.RASTREAMENTO
+
+        elif intent == "informacao_pagamento":
+            response = resp.INFORMACAO_PAGAMENTO
+
+        elif intent == "armazenamento_queijo":
+            response = resp.ARMAZENAMENTO_QUEIJO
+
+        elif intent == "embalagem_presente":
+            response = resp.EMBALAGEM_PRESENTE
 
         elif intent == "busca_produto":
-            # Buscar produtos
             termo = intent_classifier.extract_search_term(message)
-            logger.info(f"🔍 Termo de busca: {termo}")
+            logger.info(f"Termo de busca: {termo}")
 
             result = tools_helper.buscar_produtos(termo or message, limite=5)
 
             if result["status"] == "success":
-                produtos = result["produtos"]
-
-                if not produtos:
-                    response = "😅 Não encontrei nenhum produto com esse termo.\n\n"
-                    response += "Tente buscar por: queijo, cachaça, doce, café..."
-                else:
-                    response = f"✨ Encontrei {len(produtos)} produto{'s' if len(produtos) > 1 else ''}!\n\n"
-
-                    for i, p in enumerate(produtos, 1):
-                        response += f"{i}️⃣ *{p['nome']}*\n"
-                        response += f"   💰 R$ {p['preco']:.2f}\n"
-                        response += f"   📦 {int(p['estoque_atual'])} em estoque\n\n"
-
-                    response += "Qual te interessa? Digite o número ou nome! 😊"
+                response = resp.formatar_produto_sem_emoji(result["produtos"])
             else:
-                response = "😔 Ops, tive um problema ao buscar produtos. Tente novamente!"
+                response = "Ops, tive um problema ao buscar produtos. Tente novamente."
 
         elif intent == "adicionar_carrinho":
-            # Adicionar ao carrinho
             qtd = intent_classifier.extract_quantity(message)
             result = tools_helper.adicionar_carrinho(phone, "1", qtd)
 
             if result["status"] == "success":
-                response = f"✅ Adicionei {qtd} item(s) ao carrinho!\n\n"
-                response += f"🛒 Total de itens: {result['total_itens']}\n\n"
+                response = f"Adicionei {qtd} item(s) ao carrinho!\n\n"
+                response += f"Total de itens: {result['total_itens']}\n\n"
                 response += "Quer adicionar mais algo ou ver o carrinho?"
             else:
-                response = f"😔 Ops! {result['message']}"
+                response = f"Ops! {result['message']}"
 
         elif intent == "ver_carrinho":
-            # Ver carrinho
             result = tools_helper.ver_carrinho(phone)
 
             if result["status"] == "success":
-                if result["vazio"]:
-                    response = "🛒 Seu carrinho está vazio!\n\n"
-                    response += "Que tal buscar alguns produtos? 😊"
-                else:
-                    response = "🛒 *Seu Carrinho:*\n\n"
-
-                    for i, item in enumerate(result["carrinho"], 1):
-                        produto = item["produto"]
-                        response += f"{i}. *{produto['nome']}*\n"
-                        response += f"   Qtd: {item['quantidade']} x R$ {produto['preco']:.2f}\n"
-                        response += f"   Subtotal: R$ {item['subtotal']:.2f}\n\n"
-
-                    response += f"💰 *Total: R$ {result['total']:.2f}*\n\n"
-                    response += "Quer finalizar o pedido? 😊"
+                response = resp.formatar_carrinho_sem_emoji(result)
             else:
-                response = f"😔 Ops! {result['message']}"
+                response = f"Ops! {result['message']}"
 
         elif intent == "calcular_frete":
-            response = "📦 *Cálculo de Frete*\n\n"
-            response += "Para calcular o frete, me informe seu CEP! 📍\n\n"
+            response = "*Cálculo de Frete*\n\n"
+            response += "Para calcular o frete, me informe seu CEP.\n\n"
             response += "Exemplo: 30120-010"
 
         elif intent == "finalizar_pedido":
-            # Finalizar pedido
             result = tools_helper.finalizar_pedido(phone, metodo_pagamento="pix")
 
             if result["status"] == "success":
-                pedido = result["pedido"]
-                response = "🎉 *Pedido Finalizado!*\n\n"
-                response += f"📋 Número: {pedido['numero']}\n"
-                response += f"💰 Total: R$ {pedido['total']:.2f}\n"
-                response += f"💳 Pagamento: {pedido['metodo_pagamento'].upper()}\n\n"
-                response += "📱 Em instantes você receberá o QR Code PIX para pagamento!\n\n"
-                response += "Obrigado pela preferência! 🙏"
+                response = resp.formatar_pedido_finalizado_sem_emoji(result["pedido"])
             else:
-                response = f"😔 Ops! {result['message']}"
+                response = f"Ops! {result['message']}"
 
         elif intent == "consultar_pedido":
-            # Consultar pedido
             result = tools_helper.consultar_pedidos(phone)
 
             if result["status"] == "success":
-                pedidos = result["pedidos"]
-
-                if not pedidos:
-                    response = "📦 Você ainda não tem pedidos.\n\n"
-                    response += "Que tal fazer seu primeiro pedido? 😊"
-                else:
-                    response = "📦 *Seus Pedidos:*\n\n"
-
-                    for pedido in pedidos:
-                        response += f"🔖 {pedido['numero']}\n"
-                        response += f"💰 R$ {pedido['total']:.2f}\n"
-                        response += f"📊 Status: {pedido['status']}\n"
-                        response += f"📅 {pedido['criado_em'][:10]}\n\n"
-
-                    response += "Alguma dúvida sobre seus pedidos? 😊"
+                response = resp.formatar_pedidos_sem_emoji(result["pedidos"])
             else:
-                response = f"😔 Ops! {result['message']}"
+                response = f"Ops! {result['message']}"
 
         else:
             response = "Desculpe, não entendi. Como posso ajudar?"
