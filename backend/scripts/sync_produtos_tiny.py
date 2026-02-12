@@ -112,6 +112,12 @@ async def sincronizar_produtos():
 
                 if existe:
                     # Atualizar produto existente
+                    # Combinar descrição + descrição complementar
+                    descricao_completa = produto.get("descricao", "")
+                    desc_complementar = produto.get("descricao_complementar", "")
+                    if desc_complementar and desc_complementar.strip():
+                        descricao_completa = f"{descricao_completa}\n\n{desc_complementar}"
+
                     cursor.execute("""
                         UPDATE produtos_site SET
                             nome = %s,
@@ -122,6 +128,7 @@ async def sincronizar_produtos():
                             unidade = %s,
                             imagem_url = %s,
                             imagens_adicionais = %s,
+                            link_produto = %s,
                             categoria = %s,
                             estoque_disponivel = %s,
                             quantidade_estoque = %s,
@@ -131,13 +138,14 @@ async def sincronizar_produtos():
                         WHERE tiny_id = %s
                     """, (
                         produto["nome"],
-                        produto["descricao"],
+                        descricao_completa,
                         produto["preco"],
                         produto["preco_promocional"],
                         peso,
                         produto.get("unidade", "UN"),
                         imagem_url,
                         Json(imagens) if imagens else None,
+                        produto.get("url_produto") or produto.get("link_produto", ""),
                         produto["categoria"],
                         produto["estoque"] > 0,
                         int(produto["estoque"]),
@@ -149,29 +157,37 @@ async def sincronizar_produtos():
 
                 else:
                     # Inserir novo produto
+                    # Combinar descrição + descrição complementar
+                    descricao_completa = produto.get("descricao", "")
+                    desc_complementar = produto.get("descricao_complementar", "")
+                    if desc_complementar and desc_complementar.strip():
+                        descricao_completa = f"{descricao_completa}\n\n{desc_complementar}"
+
                     cursor.execute("""
                         INSERT INTO produtos_site (
                             tiny_id, nome, descricao,
                             preco, preco_promocional,
                             peso, unidade,
                             imagem_url, imagens_adicionais,
+                            link_produto,
                             categoria,
                             estoque_disponivel, quantidade_estoque,
                             ativo, destaque,
                             sincronizado_em, created_at, updated_at
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), NOW()
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), NOW()
                         )
                     """, (
                         str(produto["tiny_id"]),
                         produto["nome"],
-                        produto["descricao"],
+                        descricao_completa,
                         produto["preco"],
                         produto["preco_promocional"],
                         peso,
                         produto.get("unidade", "UN"),
                         imagem_url,
                         Json(imagens) if imagens else None,
+                        produto.get("url_produto") or produto.get("link_produto", ""),
                         produto["categoria"],
                         produto["estoque"] > 0,
                         int(produto["estoque"]),

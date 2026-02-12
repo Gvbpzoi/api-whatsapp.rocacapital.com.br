@@ -81,6 +81,7 @@ class SupabaseProdutos:
                     peso,
                     unidade,
                     imagem_url,
+                    link_produto,
                     categoria,
                     subcategoria,
                     tags,
