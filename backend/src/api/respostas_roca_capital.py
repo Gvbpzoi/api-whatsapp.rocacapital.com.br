@@ -61,7 +61,7 @@ Site: https://rocacapital.com.br
 Quer saber mais alguma coisa?"""
 
 
-INFORMACAO_ENTREGA = """Oi, bom dia! A gente faz entrega sim.
+INFORMACAO_ENTREGA = """A gente faz entrega sim.
 
 Nossas entregas funcionam dessa forma:
 Se a compra for feita até 16h (segunda a sexta), ela sai no mesmo dia. Pedidos depois desse horário, a gente entrega no dia seguinte.

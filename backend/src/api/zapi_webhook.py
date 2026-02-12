@@ -146,11 +146,11 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
 
         # Processar baseado no intent
         if intent == "atendimento_inicial":
-            # Se é conversa contínua e só saudação, responde de forma simples
-            if not is_nova_conversa and eh_so_saudacao:
+            # Em conversa contínua, NUNCA dá saudação completa
+            if not is_nova_conversa:
                 response = "Oi! Em que posso te ajudar?"
             else:
-                # Nova conversa ou saudação com pedido: saudação completa
+                # Nova conversa: saudação completa
                 response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False)
 
         elif intent == "informacao_loja":
@@ -161,8 +161,12 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             response += resp.INFORMACAO_LOJA
 
         elif intent == "informacao_entrega":
-            # Já tem "Oi, bom dia!" na resposta de entrega, então não duplica
-            response = resp.INFORMACAO_ENTREGA
+            # Adiciona saudação apenas em nova conversa
+            if is_nova_conversa:
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response += resp.INFORMACAO_ENTREGA
+            else:
+                response = resp.INFORMACAO_ENTREGA
 
         elif intent == "retirada_loja":
             if comeca_com_saudacao and not eh_so_saudacao:
