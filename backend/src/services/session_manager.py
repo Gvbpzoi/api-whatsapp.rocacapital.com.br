@@ -15,9 +15,20 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from loguru import logger
 
-# Adicionar path do sistema de memória
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
-from memory.memory import memory_write, memory_read
+# Tentar importar sistema de memória persistente (opcional)
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+    from memory.memory import memory_write, memory_read
+    MEMORY_AVAILABLE = True
+    logger.info("✅ Sistema de memória persistente disponível")
+except ImportError:
+    MEMORY_AVAILABLE = False
+    logger.warning("⚠️ Sistema de memória persistente não disponível (usando apenas memória em RAM)")
+    # Funções mock para não quebrar o código
+    def memory_write(*args, **kwargs):
+        return {"id": "mock", "content": kwargs.get("content", "")}
+    def memory_read(*args, **kwargs):
+        return []
 
 from ..models.session import (
     SessionStatus, SessionMode, MessageSource,
