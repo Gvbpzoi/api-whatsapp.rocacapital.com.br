@@ -64,19 +64,19 @@ def main():
         print(f"Total: {len(tables)} tabelas")
         print("=" * 70)
 
-        # Verificar especificamente a tabela produtos
+        # Verificar especificamente a tabela produtos_site
         cursor.execute("""
             SELECT column_name, data_type, is_nullable
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            AND table_name = 'produtos'
+            AND table_name = 'produtos_site'
             ORDER BY ordinal_position
         """)
 
         produtos_cols = cursor.fetchall()
 
         if produtos_cols:
-            print("\n✅ Tabela 'produtos' existe!")
+            print("\n✅ Tabela 'produtos_site' existe!")
             print("=" * 70)
             print("Colunas:")
             for col_name, data_type, nullable in produtos_cols:
@@ -84,8 +84,7 @@ def main():
                 print(f"  - {col_name:<30} {data_type:<20} {null_str}")
             print("=" * 70)
         else:
-            print("\n❌ Tabela 'produtos' NÃO existe no schema 'public'")
-            print("   Você precisa executar o supabase_schema.sql")
+            print("\n❌ Tabela 'produtos_site' NÃO existe no schema 'public'")
 
         cursor.close()
         conn.close()
