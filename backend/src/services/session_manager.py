@@ -6,11 +6,18 @@ Funcionalidades:
 - Pausa/retoma agente automaticamente
 - Processa comandos de controle (/pausar, /retomar, etc)
 - Mantém estado de cada sessão
+- Memória persistente de preferências e aprendizados
 """
 import re
+import sys
+import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from loguru import logger
+
+# Adicionar path do sistema de memória
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+from memory.memory import memory_write, memory_read
 
 from ..models.session import (
     SessionStatus, SessionMode, MessageSource,
@@ -136,6 +143,112 @@ class SessionManager:
         """Limpa histórico de conversa."""
         if phone in self._conversation_history:
             self._conversation_history[phone] = []
+
+    # ==================== Memória Persistente (Atlas) ====================
+
+    def save_customer_preference(
+        self,
+        phone: str,
+        preference: str,
+        category: Optional[str] = None
+    ) -> Dict:
+        """
+        Salva preferência do cliente na memória persistente.
+
+        Args:
+            phone: Número do telefone
+            preference: Preferência detectada
+            category: Categoria (ex: "produto", "entrega", "pagamento")
+
+        Example:
+            >>> save_customer_preference(
+            ...     "5531999999999",
+            ...     "Gosta de queijos meia-cura",
+            ...     "produto"
+            ... )
+        """
+        tags = [f"cliente:{phone}"]
+        if category:
+            tags.append(f"categoria:{category}")
+
+        entry = memory_write(
+            content=preference,
+            type="preference",
+            tags=tags,
+            metadata={"phone": phone, "category": category}
+        )
+
+        logger.info(f"💾 Preferência salva: {preference} (cliente: {phone[:8]}...)")
+        return entry
+
+    def save_customer_learning(
+        self,
+        phone: str,
+        learning: str,
+        context: Optional[str] = None
+    ) -> Dict:
+        """
+        Salva aprendizado sobre comportamento do cliente.
+
+        Args:
+            phone: Número do telefone
+            learning: Aprendizado detectado
+            context: Contexto adicional
+
+        Example:
+            >>> save_customer_learning(
+            ...     "5531999999999",
+            ...     "Sempre pergunta sobre prazo de entrega",
+            ...     "padrão de perguntas"
+            ... )
+        """
+        tags = [f"cliente:{phone}"]
+        if context:
+            tags.append(f"contexto:{context}")
+
+        entry = memory_write(
+            content=learning,
+            type="learning",
+            tags=tags,
+            metadata={"phone": phone, "context": context}
+        )
+
+        logger.info(f"📖 Aprendizado salvo: {learning} (cliente: {phone[:8]}...)")
+        return entry
+
+    def get_customer_preferences(self, phone: str, limit: int = 10) -> List[Dict]:
+        """
+        Recupera preferências salvas do cliente.
+
+        Args:
+            phone: Número do telefone
+            limit: Máximo de resultados
+
+        Returns:
+            Lista de preferências
+        """
+        return memory_read(
+            type="preference",
+            tags=[f"cliente:{phone}"],
+            limit=limit
+        )
+
+    def get_customer_learnings(self, phone: str, limit: int = 10) -> List[Dict]:
+        """
+        Recupera aprendizados sobre o cliente.
+
+        Args:
+            phone: Número do telefone
+            limit: Máximo de resultados
+
+        Returns:
+            Lista de aprendizados
+        """
+        return memory_read(
+            type="learning",
+            tags=[f"cliente:{phone}"],
+            limit=limit
+        )
 
     def is_agent_active(self, phone: str) -> bool:
         """Verifica se o agente está ativo para essa conversa"""
