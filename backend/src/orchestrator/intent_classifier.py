@@ -39,13 +39,30 @@ class IntentClassifier:
             r"\b(meu|meus)\s+pedidos?\b",
         ],
 
+        # Informação sobre entrega (ANTES de informacao_loja para prioridade)
+        "informacao_entrega": [
+            r"\bentreg(a|as|ar|am|amos)\b",  # Qualquer menção a "entrega"
+            r"\b(prazo|tempo|quanto\s+tempo|demora).*(entrega|entregar)\b",
+            r"\bentreg.*hoje|hoje.*entrega\b",
+            r"\bentrega.*(r[aá]pida|urgente|express|funciona|demora)\b",
+            r"\b(sobre|como|informa[cç][aã]o|informa[cç][oõ]es).*(entrega|entregar)\b",
+            r"\bfora\s+de\s+bh\b",
+            r"\b(faz|fazem|tem|voc[eê]s?.*faz).*(entrega|entregar)\b",
+            r"\bentrega.*(bh|belo\s+horizonte)\b",
+            r"entrega.*funciona",  # "como a entrega funciona"
+        ],
+
         # Informação sobre loja (horário, localização, contato)
         "informacao_loja": [
-            r"\b(hor[aá]rio|abre|fecha|funciona)\b",
-            r"\bonde\s+(fica|[eé]|est[aá])\b",
+            r"\b(hor[aá]rio|abre|fecha)\b",  # Removido "funciona" genérico
+            r"\bhor[aá]rio.*funciona(mento)?\b",  # "horário de funcionamento"
+            r"\b(como|sobre).*(loja|estabelecimento).*funciona\b",  # "como a loja funciona"
+            r"\bfunciona.*loja\b",  # "funciona a loja"
+            r"\bonde\s+(fica|[eé]|est[aá])\s+(a\s+)?(loja|voc[eê]s?)\b",
             r"\bendereco|endereço\b",
             r"\b(telefone|whatsapp|contato)\b",
             r"\b(mercado\s+central|localiza[cç][aã]o)\b",
+            r"\binforma[cç][aã]o.*loja\b",
         ],
 
         # Rastreamento de pedido
@@ -53,14 +70,6 @@ class IntentClassifier:
             r"\b(c[oó]digo|rastreio|rastreamento)\b",
             r"\bacompanhar\s+pedido\b",
             r"onde\s+(est[aá]|t[aá])\s+meu\s+pedido",
-        ],
-
-        # Informação sobre entrega
-        "informacao_entrega": [
-            r"\b(prazo|tempo|quanto\s+tempo|demora)\s+(entrega|entregar)\b",
-            r"\bentreg.*hoje|hoje.*entrega\b",
-            r"\bentrega\s+(r[aá]pida|urgente|express)\b",
-            r"\bfora\s+de\s+bh\b",
         ],
 
         # Retirada na loja
