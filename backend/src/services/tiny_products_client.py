@@ -72,17 +72,21 @@ class TinyProductsClient:
             logger.error(f"❌ Exceção ao obter produto {produto_id}: {e}")
             return None
 
-    async def listar_produtos(self, limite: int = 50) -> List[Dict]:
+    async def listar_produtos(self, limite: int = 50, filtrar_site: bool = True) -> List[Dict]:
         """
         Lista produtos do Tiny ERP
 
         Args:
             limite: Número máximo de produtos a buscar
+            filtrar_site: Se True, filtra apenas produtos com "site" nas obs
 
         Returns:
-            Lista de produtos filtrados (apenas produtos com "site" nas obs)
+            Lista de produtos (filtrados ou todos, dependendo do parâmetro)
         """
-        logger.info("🔍 Buscando produtos do Tiny ERP...")
+        if filtrar_site:
+            logger.info("🔍 Buscando produtos do Tiny ERP (apenas com 'site')...")
+        else:
+            logger.info("🔍 Buscando TODOS os produtos do Tiny ERP (sem filtro)...")
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -114,8 +118,8 @@ class TinyProductsClient:
 
                 produtos_raw = data.get("retorno", {}).get("produtos", [])
 
-                # Filtrar produtos buscando detalhes completos
-                produtos_filtrados = []
+                # Processar produtos
+                produtos_processados = []
                 total = len(produtos_raw)
                 ignorados = 0
 
@@ -137,17 +141,28 @@ class TinyProductsClient:
                         ignorados += 1
                         continue
 
-                    if await self._eh_produto_site_async(produto_completo):
-                        produtos_filtrados.append(self._normalizar_produto(produto_completo))
+                    # Se filtrar_site=True, verificar se tem "site" nas obs
+                    # Se filtrar_site=False, aceitar todos
+                    if filtrar_site:
+                        if await self._eh_produto_site_async(produto_completo):
+                            produtos_processados.append(self._normalizar_produto(produto_completo))
+                        else:
+                            ignorados += 1
                     else:
-                        ignorados += 1
+                        # Aceitar TODOS sem filtro
+                        produtos_processados.append(self._normalizar_produto(produto_completo))
 
-                logger.info(
-                    f"✅ Sincronização concluída: {len(produtos_filtrados)} produtos do site, "
-                    f"{ignorados} ignorados de {total} total"
-                )
+                if filtrar_site:
+                    logger.info(
+                        f"✅ Sincronização concluída: {len(produtos_processados)} produtos do site, "
+                        f"{ignorados} ignorados de {total} total"
+                    )
+                else:
+                    logger.info(
+                        f"✅ Sincronização concluída: {len(produtos_processados)} produtos total"
+                    )
 
-                return produtos_filtrados
+                return produtos_processados
 
         except Exception as e:
             logger.error(f"❌ Erro ao buscar produtos: {e}")

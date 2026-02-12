@@ -1,0 +1,52 @@
+# ============================================================================
+# CRONTAB - Sincronização Automática de Produtos Tiny → Supabase
+# ============================================================================
+#
+# Instalação:
+#   1. Editar crontab: crontab -e
+#   2. Colar as linhas abaixo
+#   3. Ajustar caminhos se necessário
+#
+# Horários:
+#   - 18:00 - Sync completo de TODOS os produtos (após fechamento da loja)
+#   - 22:00 - Sync incremental (apenas produtos com "site")
+#   - 02:00 - Sync incremental
+#   - 06:00 - Sync final antes da abertura
+#
+# ============================================================================
+
+# Sincronização COMPLETA (todos os produtos) - 18:00 (após fechamento)
+0 18 * * * cd /app && python scripts/sync_produtos_completo.py --all --delay 1.0 --batch 200 >> /var/log/sync_produtos.log 2>&1
+
+# Sincronização INCREMENTAL (só produtos "site") - 22:00
+0 22 * * * cd /app && python scripts/sync_produtos_tiny.py >> /var/log/sync_produtos.log 2>&1
+
+# Sincronização INCREMENTAL - 02:00
+0 2 * * * cd /app && python scripts/sync_produtos_tiny.py >> /var/log/sync_produtos.log 2>&1
+
+# Sincronização INCREMENTAL - 06:00 (antes da abertura)
+0 6 * * * cd /app && python scripts/sync_produtos_tiny.py >> /var/log/sync_produtos.log 2>&1
+
+# Limpeza de logs antigos (manter últimos 7 dias) - 03:00
+0 3 * * * find /var/log -name "sync_produtos.log*" -mtime +7 -delete
+
+# ============================================================================
+# ALTERNATIVA: Usar apenas sync completo 1x por dia
+# ============================================================================
+# Se preferir rodar sync completo apenas 1x por dia (18h):
+#
+# 0 18 * * * cd /app && python scripts/sync_produtos_completo.py --all --delay 1.0 >> /var/log/sync_produtos.log 2>&1
+#
+# ============================================================================
+
+# ============================================================================
+# FORMATO CRON:
+# ============================================================================
+# * * * * * comando
+# │ │ │ │ │
+# │ │ │ │ └── Dia da semana (0-6, 0=Domingo)
+# │ │ │ └──── Mês (1-12)
+# │ │ └────── Dia do mês (1-31)
+# │ └──────── Hora (0-23)
+# └────────── Minuto (0-59)
+# ============================================================================
