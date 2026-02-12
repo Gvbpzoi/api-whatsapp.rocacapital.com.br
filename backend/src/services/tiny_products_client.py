@@ -115,12 +115,16 @@ class TinyProductsClient:
             True se produto deve ser importado
         """
         obs = (produto.get("obs") or "").lower()
+        codigo = produto.get("codigo", "SEM_CODIGO")
+
+        # Log para debug: mostrar o que vem no campo obs
+        logger.debug(f"🔍 Produto {codigo} | obs='{obs[:50] if obs else 'VAZIO'}'")
 
         if "site" in obs:
-            logger.debug(f"✅ Produto do SITE: {produto.get('codigo')}")
+            logger.info(f"✅ Produto do SITE: {codigo}")
             return True
 
-        logger.debug(f"❌ Produto SEM 'site' nas obs: {produto.get('codigo')}")
+        logger.debug(f"⏭️ Ignorando {codigo}: não tem 'site' nas obs")
         return False
 
     def _normalizar_produto(self, produto: Dict) -> Dict:
