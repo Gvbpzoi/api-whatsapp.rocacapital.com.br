@@ -39,13 +39,66 @@ class IntentClassifier:
             r"\b(meu|meus)\s+pedidos?\b",
         ],
 
+        # Informação sobre loja (horário, localização, contato)
+        "informacao_loja": [
+            r"\b(hor[aá]rio|abre|fecha|funciona)\b",
+            r"\bonde\s+(fica|[eé]|est[aá])\b",
+            r"\bendereco|endereço\b",
+            r"\b(telefone|whatsapp|contato)\b",
+            r"\b(mercado\s+central|localiza[cç][aã]o)\b",
+        ],
+
+        # Rastreamento de pedido
+        "rastreamento_pedido": [
+            r"\b(c[oó]digo|rastreio|rastreamento)\b",
+            r"\bacompanhar\s+pedido\b",
+            r"onde\s+(est[aá]|t[aá])\s+meu\s+pedido",
+        ],
+
+        # Informação sobre entrega
+        "informacao_entrega": [
+            r"\b(prazo|tempo|quanto\s+tempo|demora)\s+(entrega|entregar)\b",
+            r"\bentreg.*hoje|hoje.*entrega\b",
+            r"\bentrega\s+(r[aá]pida|urgente|express)\b",
+            r"\bfora\s+de\s+bh\b",
+        ],
+
+        # Retirada na loja
+        "retirada_loja": [
+            r"\bretir.*loja\b",
+            r"\bpegar\s+(na\s+)?loja\b",
+            r"\bbuscar\s+(na\s+)?loja\b",
+        ],
+
+        # Informação sobre pagamento
+        "informacao_pagamento": [
+            r"\b(desconto|promo[cç][aã]o)\b",
+            r"\b(pix|cart[aã]o|dinheiro|pagamento)\b",
+            r"\bforma.*pagamento\b",
+            r"\bvale.*aliment\b",
+        ],
+
+        # Armazenamento de queijo
+        "armazenamento_queijo": [
+            r"\b(armazen|guard|conserv).*queijo\b",
+            r"\bcomo\s+guard\b",
+            r"\bgeladeira.*queijo|queijo.*geladeira\b",
+            r"\b(conserv|dur).*queijo\b",
+        ],
+
+        # Embalagem para presente
+        "embalagem_presente": [
+            r"\b(embalagem|caixa|embalar).*presente\b",
+            r"\bpresente\b",
+            r"\bcesta|kit\b",
+        ],
+
         # Calcular frete
         "calcular_frete": [
             r"\b(quanto|qual)\s+(fica|[eé]|custa|cobra)\s+(o\s+)?frete",
             r"\bcalcul.*frete\b",
-            r"\bentreg",
             r"\bcep\b",
-            r"onde (voc[eê]s?)\s+entrega",
+            r"meu\s+cep\s+([eé]|:)",
         ],
 
         # Adicionar carrinho

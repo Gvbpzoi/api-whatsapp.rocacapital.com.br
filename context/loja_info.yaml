@@ -1,0 +1,42 @@
+# Informações da Roça Capital
+
+nome: "Roça Capital"
+slogan: "Produtos artesanais mineiros com carinho"
+
+localizacao:
+  endereco: "Av. Augusto de Lima, esquina com Curitiba"
+  referencia: "Mercado Central de Belo Horizonte - bem na entrada"
+  cidade: "Belo Horizonte"
+  estado: "MG"
+  ponto_referencia: "Entrada principal do Mercado Central"
+
+horario_funcionamento:
+  segunda_sexta: "8h às 18h"
+  feriados: "8h às 13h"
+  observacao: "Última separação do dia às 17h"
+
+contatos:
+  whatsapp: "(31) 9 9847-21890"
+  whatsapp_bolos: "(31) 9 9511-5678"  # Eder - Bolos, broas, massa de pão de queijo
+  email: "sac@rocacapital.com.br"
+  email_parcerias: "sac@rocacapital.com.br"
+  site: "https://rocacapital.com.br"
+  catalogo: "https://rocacapital.com.br/collections"
+  kits: "https://rocacapital.com.br/collections/kit"
+  embalagens: "https://rocacapital.com.br/collections/embalagens-para-presente"
+
+diferenciais:
+  - "Queijos artesanais sem conservantes"
+  - "Produtos mineiros autênticos"
+  - "Atendimento personalizado"
+  - "Localização privilegiada no Mercado Central"
+  - "Entrega rápida em BH"
+  - "Embalagens personalizadas para presente"
+
+especialidades:
+  - "Queijo Minas Artesanal (Canastra)"
+  - "Queijos semi-duros e duros"
+  - "Queijos cremosos e frescos"
+  - "Cestas e kits personalizados"
+  - "Produtos artesanais mineiros"
+  - "Embalagens para presente"

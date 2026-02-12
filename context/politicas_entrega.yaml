@@ -1,0 +1,46 @@
+# Políticas de Entrega - Roça Capital
+
+entrega_bh:
+  prazo_mesmo_dia:
+    condicao: "Pedidos confirmados até 16h (segunda a sexta)"
+    prazo: "Mesmo dia"
+
+  horario_entrega: "8h às 18h"
+  tipo_rota: "Rota otimizada (sem horário fixo)"
+
+  entrega_urgente:
+    disponivel: true
+    observacao: "Solicitar ao fazer pedido"
+
+  notificacao:
+    quando_sair: true
+    canais:
+      - "WhatsApp"
+      - "E-mail"
+
+entrega_fora_bh:
+  disponivel: true
+  verificacao: "Necessário consultar CEP"
+
+  restricao_queijo:
+    condicao: "Prazo superior a 3 dias"
+    acao: "Não recomendado envio de queijo"
+    motivo: "Garantir qualidade do produto"
+
+retirada_loja:
+  disponivel: true
+  prazo_preparo: "1 hora após compra"
+  ultima_separacao: "17h"
+  localizacao: "Mercado Central - Av. Augusto de Lima esquina Curitiba"
+
+rastreamento:
+  disponivel: true
+  envio_codigo: "Por e-mail após postagem"
+  acompanhamento: "Link enviado por e-mail"
+
+possiveis_atrasos:
+  causas:
+    - "Chuva"
+    - "Alta demanda"
+    - "Falta de motoboy"
+  compromisso: "Sempre fazemos o possível para entregar dentro do prazo"

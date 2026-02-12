@@ -1,0 +1,72 @@
+# Políticas Gerais - Roça Capital
+
+pagamento:
+  descontos:
+    pix:
+      percentual: "5%"
+      valor_minimo: 499.90
+      descricao: "5% de desconto no Pix para compras acima de R$ 499,90"
+
+  vale_alimentacao:
+    aceita: false
+    mensagem: "Ainda não aceitamos vale-alimentação"
+
+  confirmacao:
+    canal: "E-mail"
+    acao_sem_confirmacao: "Verificar no sistema com número do pedido"
+
+embalagens_presentes:
+  caixas_personalizadas:
+    disponivel: true
+    descricao: "Caixas personalizadas com logo da loja"
+
+  compra_embalagens:
+    link: "https://rocacapital.com.br/collections/embalagens-para-presente"
+
+cestas_kits:
+  disponivel: true
+  link: "https://rocacapital.com.br/collections/kit"
+  personalizacao: true
+
+produtos_especiais:
+  bolos_broas_pao_queijo:
+    disponivel: true
+    contato: "Eder"
+    whatsapp: "(31) 9 9511-5678"
+    observacao: "Falar direto com o Eder"
+
+armazenamento_queijos:
+  queijos_semi_duros_duros:
+    metodo: "Vasilha plástica com tampa"
+    preparacao: "Papel-toalha no fundo para absorver umidade"
+    local: "Geladeira"
+    observacao_plastico_filme: "Pode usar se consumir rápido, mas resseca mais"
+    congelamento: "Não congelar"
+
+  queijos_cremosos_frescos:
+    temperatura: "5º a 7º"
+    recipiente: "Plástico com leve abertura para circular ar"
+    preparacao: "Papel-toalha no fundo"
+    local: "Geladeira"
+    congelamento: "Não congelar"
+
+  queijo_minas_artesanal:
+    opcao_ambiente_fresco:
+      condicao: "Lugar mais fresco"
+      suporte: "Tábua de madeira"
+      cobertura: "Queijeira"
+      manutencao: "Virar a cada 2 dias"
+      controle: "Controlar umidade"
+      resultado: "Vai maturando, ganhando textura e sabor"
+
+    observacao: "Queijo artesanal sem conservantes - alimento vivo"
+    cuidado: "Controlar temperatura e umidade"
+
+parcerias:
+  disponivel: true
+  contato: "sac@rocacapital.com.br"
+  envio: "Portfólio por e-mail"
+
+horario_feriado:
+  funcionamento: "8h às 13h"
+  dias: "Todos os feriados"
