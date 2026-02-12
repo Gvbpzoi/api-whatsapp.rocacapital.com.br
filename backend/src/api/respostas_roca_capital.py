@@ -5,13 +5,14 @@ Respostas personalizadas da Roça Capital (sem emojis)
 from datetime import datetime
 
 
-def gerar_saudacao_contextual(hora_atual: int = None, tem_pedido: bool = False) -> str:
+def gerar_saudacao_contextual(hora_atual: int = None, tem_pedido: bool = False, nome_cliente: str = None) -> str:
     """
     Gera saudação contextual baseada no horário e se a pessoa já fez um pedido.
 
     Args:
         hora_atual: Hora do dia (0-23). Se None, usa hora atual.
         tem_pedido: Se True, a pessoa já disse o que quer. Se False, só mandou saudação.
+        nome_cliente: Nome do cliente (se conhecido). Usa na saudação.
 
     Returns:
         Saudação personalizada
@@ -30,12 +31,18 @@ def gerar_saudacao_contextual(hora_atual: int = None, tem_pedido: bool = False) 
     # Nome do atendente
     atendente = "Guilherme"
 
-    # Se a pessoa já disse o que quer, não pergunta "como posso ajudar"
-    if tem_pedido:
-        return f"{saudacao}! Você tá falando hoje com o {atendente}."
+    # Se conhece o nome do cliente, usa na saudação
+    if nome_cliente:
+        if tem_pedido:
+            return f"{saudacao}, {nome_cliente}! Você tá falando com o {atendente}."
+        else:
+            return f"{saudacao}, {nome_cliente}! Você tá falando com o {atendente}. Como é que eu posso te ajudar?"
     else:
-        # Se só mandou "bom dia" ou similar, pergunta o que precisa
-        return f"{saudacao}! Você tá falando hoje com o {atendente}. Como é que eu posso te ajudar?"
+        # Não conhece o cliente ainda
+        if tem_pedido:
+            return f"{saudacao}! Você tá falando hoje com o {atendente}."
+        else:
+            return f"{saudacao}! Você tá falando hoje com o {atendente}. Como é que eu posso te ajudar?"
 
 
 SAUDACAO = """Oi, tudo bem? Bem-vindo à Roça Capital!
@@ -232,6 +239,12 @@ https://rocacapital.com.br/collections"""
 
 
 # Respostas específicas para contextos especiais
-RESPOSTA_NOME_ATENDENTE = """Você tá falando com o Guilherme! Qualquer coisa é só chamar."""
+RESPOSTA_NOME_ATENDENTE = """Você tá falando com o Guilherme! Qualquer coisa é só chamar.
+
+Ah, e qual é o seu nome?"""
 
 RESPOSTA_DESPEDIDA = """Maravilha! Qualquer dúvida, é só voltar aqui. Fico à disposição!"""
+
+RESPOSTA_NOME_E_DESPEDIDA = """Você tá falando com o Guilherme! Maravilha, dá uma olhada com calma e qualquer dúvida é só voltar aqui.
+
+Ah, e qual é o seu nome?"""

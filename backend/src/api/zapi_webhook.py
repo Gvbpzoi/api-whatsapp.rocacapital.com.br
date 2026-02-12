@@ -187,13 +187,58 @@ def _detectar_pergunta_nome(message: str) -> bool:
         r"quem (é|e) (você|voce|vc)",
         r"você (é|e) quem",
         r"seu nome",
-        r"como (você|voce|vc) se chama",
+        r"como.*você.*chama",  # Mais flexível: pega "como é que você chama"
+        r"como.*voce.*chama",
+        r"como.*vc.*chama",
     ]
 
     for padrao in padroes_nome:
         if re.search(padrao, mensagem_lower):
             return True
     return False
+
+
+def _extrair_nome_cliente(message: str, historico: list) -> Optional[str]:
+    """
+    Detecta se a mensagem é uma resposta com o nome do cliente.
+    Verifica se última mensagem do bot perguntou o nome.
+
+    Returns:
+        Nome do cliente ou None
+    """
+    # Verificar se última mensagem do bot perguntou o nome
+    if not historico or len(historico) < 1:
+        return None
+
+    ultima_msg_bot = None
+    for msg in reversed(historico):
+        if msg["role"] == "assistant":
+            ultima_msg_bot = msg["content"].lower()
+            break
+
+    if not ultima_msg_bot or "qual é o seu nome" not in ultima_msg_bot:
+        return None
+
+    # Se chegou aqui, bot perguntou o nome na última mensagem
+    # Extrair nome da resposta do cliente
+    mensagem = message.strip()
+
+    # Padrões comuns de resposta
+    # "Meu nome é João", "É João", "João", "Sou o João", etc
+    padroes = [
+        r"(?:meu nome (?:é|e)|me chamo|sou(?: o| a)?) ([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ][a-záàâãéèêíïóôõöúçñ]+)",
+        r"^(?:é|e) ([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ][a-záàâãéèêíïóôõöúçñ]+)",
+        r"^([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ][a-záàâãéèêíïóôõöúçñ]+)$",  # Nome sozinho
+    ]
+
+    for padrao in padroes:
+        match = re.search(padrao, mensagem, re.IGNORECASE)
+        if match:
+            nome = match.group(1).capitalize()
+            logger.info(f"📝 Nome do cliente extraído: {nome}")
+            return nome
+
+    return None
 
 
 def _detectar_despedida(message: str) -> bool:
@@ -241,16 +286,47 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         is_nova_conversa = session_manager.is_new_conversation(phone)
         logger.info(f"{'🆕 Nova conversa' if is_nova_conversa else '💬 Conversa contínua'} com {phone[:8]}")
 
+        # Recuperar nome do cliente da memória (se existe)
+        nome_cliente_salvo = None
+        preferencias = session_manager.get_customer_preferences(phone, limit=5)
+        for pref in preferencias:
+            if pref.get("content", "").startswith("Nome: "):
+                nome_cliente_salvo = pref["content"].replace("Nome: ", "")
+                logger.info(f"👤 Nome recuperado da memória: {nome_cliente_salvo}")
+                break
+
         # VERIFICAÇÕES ESPECIAIS (antes da classificação de intent)
         # Essas têm prioridade sobre a classificação genérica
 
-        # Verificar se está perguntando o nome do atendente
-        if _detectar_pergunta_nome(message):
+        # 1. Verificar se cliente está respondendo com seu nome
+        historico = session_manager.get_conversation_history(phone, limit=5)
+        nome_cliente = _extrair_nome_cliente(message, historico)
+        if nome_cliente:
+            # Salvar nome na memória persistente
+            session_manager.save_customer_preference(
+                phone=phone,
+                preference=f"Nome: {nome_cliente}",
+                category="identidade"
+            )
+            logger.info(f"💾 Nome salvo: {nome_cliente}")
+            return f"Prazer, {nome_cliente}! Fico à disposição sempre que precisar."
+
+        # 2. Detectar outros contextos especiais
+        pergunta_nome = _detectar_pergunta_nome(message)
+        despedida = _detectar_despedida(message)
+
+        # Se tem AMBOS (despedida + pergunta nome), responde combinado
+        if pergunta_nome and despedida:
+            logger.info("👋🏷️ Detectada despedida + pergunta sobre nome")
+            return resp.RESPOSTA_NOME_E_DESPEDIDA
+
+        # Se só pergunta nome
+        if pergunta_nome:
             logger.info("🏷️ Detectada pergunta sobre nome do atendente")
             return resp.RESPOSTA_NOME_ATENDENTE
 
-        # Verificar se está se despedindo
-        if _detectar_despedida(message):
+        # Se só despedida
+        if despedida:
             logger.info("👋 Detectada despedida")
             return resp.RESPOSTA_DESPEDIDA
 
@@ -269,11 +345,11 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 response = "Oi! Em que posso te ajudar?"
             else:
                 # Nova conversa: saudação completa
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False)
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False, nome_cliente=nome_cliente_salvo)
 
         elif intent == "informacao_loja":
             if comeca_com_saudacao and not eh_so_saudacao:
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo) + "\n\n"
             else:
                 response = ""
             response += resp.INFORMACAO_LOJA
@@ -285,7 +361,7 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
 
             # Adiciona saudação apenas em nova conversa
             if is_nova_conversa:
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo) + "\n\n"
             else:
                 response = ""
 
@@ -300,21 +376,21 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
 
         elif intent == "retirada_loja":
             if comeca_com_saudacao and not eh_so_saudacao:
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo) + "\n\n"
             else:
                 response = ""
             response += resp.RETIRADA_LOJA
 
         elif intent == "rastreamento_pedido":
             if comeca_com_saudacao and not eh_so_saudacao:
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo) + "\n\n"
             else:
                 response = ""
             response += resp.RASTREAMENTO
 
         elif intent == "informacao_pagamento":
             if comeca_com_saudacao and not eh_so_saudacao:
-                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo) + "\n\n"
             else:
                 response = ""
             response += resp.INFORMACAO_PAGAMENTO
@@ -330,7 +406,7 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         elif intent == "busca_produto":
             # Se começou com saudação, adiciona saudação contextual primeiro
             if comeca_com_saudacao and not eh_so_saudacao:
-                saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True)
+                saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo)
                 response = saudacao + "\n\n"
             else:
                 response = ""
