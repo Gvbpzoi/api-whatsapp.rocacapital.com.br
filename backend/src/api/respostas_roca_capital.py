@@ -61,18 +61,24 @@ Site: https://rocacapital.com.br
 Quer saber mais alguma coisa?"""
 
 
-INFORMACAO_ENTREGA = """A gente faz entrega sim.
+INFORMACAO_ENTREGA_BH = """A gente faz entrega aí na sua região sim!
 
-Nossas entregas funcionam dessa forma:
+Nossas entregas em BH funcionam assim:
 Se a compra for feita até 16h (segunda a sexta), ela sai no mesmo dia. Pedidos depois desse horário, a gente entrega no dia seguinte.
 
 A entrega acontece entre 8h e 18h em rota otimizada. A gente não tem horário fixo, a não ser que você tenha pedido entrega urgente, combinado?
 
-Quando o pedido sair daqui da loja, a gente avisa você por WhatsApp e e-mail, tranquilo?
+Quando o pedido sair daqui da loja, a gente avisa você por WhatsApp e e-mail, tranquilo?"""
 
-Ah, e se você for de fora de BH: a gente entrega sim, mas depende da região. Me passa seu CEP que eu verifico pra você, beleza?
+INFORMACAO_ENTREGA_FORA_BH = """A gente entrega sim pra fora de BH, mas depende da região.
+
+Me passa seu CEP que eu verifico o prazo e o valor do frete pra você, beleza?
 
 Só um detalhe importante: se o prazo de entrega ultrapassar 3 dias, a gente não recomenda enviar queijo não, sabe? É que nossos queijos são artesanais, sem conservantes, então a gente prefere garantir que ele chegue perfeito até você."""
+
+INFORMACAO_ENTREGA_GERAL = """A gente faz entrega sim!
+
+Você é de Belo Horizonte?"""
 
 
 RETIRADA_LOJA = """Maravilha! Você pode retirar aqui na loja sim.

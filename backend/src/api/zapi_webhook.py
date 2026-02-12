@@ -117,6 +117,62 @@ def _eh_apenas_saudacao(message: str) -> bool:
     return mensagem_limpa in saudacoes_completas
 
 
+def _detectar_localizacao(message: str) -> str:
+    """
+    Detecta se a mensagem contém informação de localização.
+
+    Returns:
+        "bh" - Cliente está em Belo Horizonte ou região metropolitana
+        "fora_bh" - Cliente está fora de BH
+        "desconhecido" - Não mencionou localização
+    """
+    mensagem_lower = message.lower()
+
+    # Bairros de BH
+    bairros_bh = [
+        "pampulha", "savassi", "lourdes", "funcionários", "funcionarios",
+        "centro", "barro preto", "santo agostinho", "santa efigênia", "santa efigenia",
+        "carlos prates", "lagoinha", "floresta", "santa tereza", "santa teresa",
+        "mangabeiras", "belvedere", "buritis", "gutierrez", "são bento", "sao bento",
+        "cidade nova", "padre eustáquio", "padre eustaquio", "itapoã", "itapoa",
+        "castelo", "prado", "calafate", "caiçara", "caiçaras", "caicara", "caicaras",
+        "são pedro", "sao pedro", "barreiro", "venda nova", "eldorado", "sion"
+    ]
+
+    # Cidades da região metropolitana de BH
+    regiao_metropolitana = [
+        "nova lima", "sabará", "sabara", "contagem", "betim", "ribeirão das neves",
+        "ribeirao das neves", "santa luzia", "lagoa santa", "vespasiano",
+        "pedro leopoldo", "raposos", "rio acima", "brumadinho", "ibirité", "ibirite",
+        "mateus leme", "juatuba", "esmeraldas", "confins", "florestal"
+    ]
+
+    # Verifica bairros de BH
+    for bairro in bairros_bh:
+        if bairro in mensagem_lower:
+            return "bh"
+
+    # Verifica região metropolitana
+    for cidade in regiao_metropolitana:
+        if cidade in mensagem_lower:
+            return "bh"
+
+    # Verifica se menciona BH explicitamente
+    if any(termo in mensagem_lower for termo in ["belo horizonte", "bh", "belô", "belo hte"]):
+        return "bh"
+
+    # Verifica se menciona CEP ou cidade de fora
+    if any(termo in mensagem_lower for termo in ["cep", "são paulo", "rio de janeiro", "minas gerais", "mg", "sp", "rj"]):
+        return "fora_bh"
+
+    # Verifica padrão de CEP (nnnnn-nnn ou nnnnnnnnn)
+    import re
+    if re.search(r'\d{5}-?\d{3}', mensagem_lower):
+        return "fora_bh"
+
+    return "desconhecido"
+
+
 async def _process_with_agent(phone: str, message: str, timestamp: int = None) -> str:
     """
     Processa mensagem com o agente (GOTCHA Engine).
@@ -161,12 +217,24 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             response += resp.INFORMACAO_LOJA
 
         elif intent == "informacao_entrega":
+            # Detectar localização na mensagem
+            localizacao = _detectar_localizacao(message)
+            logger.info(f"📍 Localização detectada: {localizacao}")
+
             # Adiciona saudação apenas em nova conversa
             if is_nova_conversa:
                 response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
-                response += resp.INFORMACAO_ENTREGA
             else:
-                response = resp.INFORMACAO_ENTREGA
+                response = ""
+
+            # Escolhe resposta baseada na localização
+            if localizacao == "bh":
+                response += resp.INFORMACAO_ENTREGA_BH
+            elif localizacao == "fora_bh":
+                response += resp.INFORMACAO_ENTREGA_FORA_BH
+            else:
+                # Não mencionou localização: pergunta
+                response += resp.INFORMACAO_ENTREGA_GERAL
 
         elif intent == "retirada_loja":
             if comeca_com_saudacao and not eh_so_saudacao:
