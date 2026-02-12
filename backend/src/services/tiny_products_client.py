@@ -28,6 +28,71 @@ class TinyProductsClient:
             logger.warning("⚠️ TINY_API_TOKEN ou TINY_TOKEN não configurado")
             logger.info("💡 Configure uma dessas variáveis com seu token da API v2 do Tiny")
 
+    @staticmethod
+    def _converter_estoque(produto: Dict) -> float:
+        """
+        Converte estoque da API Tiny para float, tratando vários formatos
+
+        A API do Tiny pode retornar estoque em diferentes formatos:
+        - String com vírgula: "10,5" → 10.5
+        - String com ponto: "10.5" → 10.5
+        - Número: 10.5 → 10.5
+        - Negativo: -5 → 0 (não existe estoque negativo)
+        - None/vazio: → 0
+        - Pode estar em campos: "estoque", "saldo", "estoque_atual"
+
+        Args:
+            produto: Dicionário do produto retornado pela API Tiny
+
+        Returns:
+            Estoque como float (sempre >= 0)
+        """
+        # Tentar vários campos possíveis
+        campos_estoque = ["estoque", "saldo", "estoque_atual", "quantidade"]
+
+        for campo in campos_estoque:
+            valor = produto.get(campo)
+
+            if valor is None or valor == "":
+                continue
+
+            try:
+                # Se for string, substituir vírgula por ponto
+                if isinstance(valor, str):
+                    valor = valor.strip().replace(",", ".")
+
+                # Converter para float
+                estoque_float = float(valor)
+
+                # Estoque negativo vira 0
+                if estoque_float < 0:
+                    logger.warning(
+                        f"⚠️ Estoque negativo detectado ({estoque_float}) para produto "
+                        f"{produto.get('id', '?')} - campo '{campo}'. Usando 0."
+                    )
+                    return 0.0
+
+                # Sucesso!
+                if estoque_float > 0:
+                    logger.debug(
+                        f"✅ Estoque obtido do campo '{campo}': {estoque_float} "
+                        f"(produto {produto.get('id', '?')})"
+                    )
+                return estoque_float
+
+            except (ValueError, TypeError) as e:
+                logger.debug(
+                    f"⚠️ Erro ao converter estoque do campo '{campo}': {valor} - {e}"
+                )
+                continue
+
+        # Nenhum campo funcionou
+        logger.warning(
+            f"⚠️ Nenhum campo de estoque válido encontrado para produto "
+            f"{produto.get('id', '?')} ({produto.get('nome', '?')})"
+        )
+        return 0.0
+
     def _get_headers(self) -> Dict[str, str]:
         """Retorna headers para requisições"""
         return {
@@ -254,7 +319,7 @@ class TinyProductsClient:
             "gtin": produto.get("gtin", ""),
             "categoria": produto.get("categoria", ""),
             "ncm": produto.get("ncm", ""),
-            "estoque": float(produto.get("estoque", 0) or 0),
+            "estoque": self._converter_estoque(produto),  # Converte com tratamento robusto
             "imagens": imagens_urls,  # Array de URLs processado de anexos + imagens_externas
             "url_produto": produto.get("url_produto", ""),
             "link_produto": produto.get("link_produto", ""),
