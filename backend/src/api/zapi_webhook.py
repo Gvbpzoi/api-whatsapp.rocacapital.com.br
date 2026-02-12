@@ -6,6 +6,7 @@ Processa mensagens e responde automaticamente
 from fastapi import APIRouter, Request, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 from loguru import logger
 
 from ..services.zapi_client import get_zapi_client
@@ -45,7 +46,7 @@ class ZAPIWebhookMessage(BaseModel):
     participantPhone: Optional[str] = None
 
 
-async def process_and_respond(phone: str, message: str):
+async def process_and_respond(phone: str, message: str, timestamp: int = None):
     """
     Processa mensagem com o agente e envia resposta via ZAPI.
     Roda em background para não bloquear webhook.
@@ -61,7 +62,7 @@ async def process_and_respond(phone: str, message: str):
             return
 
         # Processar com agente
-        response_text = await _process_with_agent(phone, message)
+        response_text = await _process_with_agent(phone, message, timestamp)
 
         if not response_text:
             logger.warning(f"⚠️ Nenhuma resposta gerada para {phone[:8]}")
@@ -80,7 +81,38 @@ async def process_and_respond(phone: str, message: str):
         logger.error(f"❌ Erro ao processar mensagem: {e}")
 
 
-async def _process_with_agent(phone: str, message: str) -> str:
+def _detectar_saudacao_inicial(message: str) -> bool:
+    """
+    Detecta se a mensagem começa com uma saudação.
+    """
+    mensagem_lower = message.lower().strip()
+    saudacoes = ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hey", "alo", "alô", "opa"]
+
+    # Verifica se começa com alguma saudação
+    for saudacao in saudacoes:
+        if mensagem_lower.startswith(saudacao):
+            return True
+    return False
+
+
+def _eh_apenas_saudacao(message: str) -> bool:
+    """
+    Verifica se a mensagem é APENAS uma saudação, sem conteúdo adicional.
+    """
+    mensagem_lower = message.lower().strip()
+    # Remove pontuação
+    mensagem_limpa = mensagem_lower.replace("!", "").replace("?", "").replace(".", "").replace(",", "")
+
+    saudacoes_completas = [
+        "oi", "olá", "ola", "bom dia", "boa tarde", "boa noite",
+        "hey", "alo", "alô", "opa", "e ai", "e aí", "eai",
+        "oi tudo bem", "ola tudo bem", "olá tudo bem"
+    ]
+
+    return mensagem_limpa in saudacoes_completas
+
+
+async def _process_with_agent(phone: str, message: str, timestamp: int = None) -> str:
     """
     Processa mensagem com o agente (GOTCHA Engine).
 
@@ -88,45 +120,86 @@ async def _process_with_agent(phone: str, message: str) -> str:
         Texto da resposta
     """
     try:
+        # Calcular hora da mensagem
+        if timestamp:
+            # Timestamp da ZAPI está em milissegundos
+            hora_mensagem = datetime.fromtimestamp(timestamp / 1000).hour
+        else:
+            hora_mensagem = datetime.now().hour
+
         # Classificar intent
         intent = intent_classifier.classify(message)
         logger.info(f"🎯 Intent classificado: {intent}")
 
+        # Detectar se começa com saudação
+        comeca_com_saudacao = _detectar_saudacao_inicial(message)
+        eh_so_saudacao = _eh_apenas_saudacao(message)
+
         # Processar baseado no intent
         if intent == "atendimento_inicial":
-            response = resp.SAUDACAO
+            # Se é só saudação, pergunta como pode ajudar
+            response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False)
 
         elif intent == "informacao_loja":
-            response = resp.INFORMACAO_LOJA
+            if comeca_com_saudacao and not eh_so_saudacao:
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+            else:
+                response = ""
+            response += resp.INFORMACAO_LOJA
 
         elif intent == "informacao_entrega":
+            # Já tem "Oi, bom dia!" na resposta de entrega, então não duplica
             response = resp.INFORMACAO_ENTREGA
 
         elif intent == "retirada_loja":
-            response = resp.RETIRADA_LOJA
+            if comeca_com_saudacao and not eh_so_saudacao:
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+            else:
+                response = ""
+            response += resp.RETIRADA_LOJA
 
         elif intent == "rastreamento_pedido":
-            response = resp.RASTREAMENTO
+            if comeca_com_saudacao and not eh_so_saudacao:
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+            else:
+                response = ""
+            response += resp.RASTREAMENTO
 
         elif intent == "informacao_pagamento":
-            response = resp.INFORMACAO_PAGAMENTO
+            if comeca_com_saudacao and not eh_so_saudacao:
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True) + "\n\n"
+            else:
+                response = ""
+            response += resp.INFORMACAO_PAGAMENTO
 
         elif intent == "armazenamento_queijo":
+            # Já tem "Que bom que você perguntou!" na resposta, não adiciona saudação
             response = resp.ARMAZENAMENTO_QUEIJO
 
         elif intent == "embalagem_presente":
+            # Já tem "Temos sim!" na resposta, não adiciona saudação
             response = resp.EMBALAGEM_PRESENTE
 
         elif intent == "busca_produto":
+            # Se começou com saudação, adiciona saudação contextual primeiro
+            if comeca_com_saudacao and not eh_so_saudacao:
+                saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True)
+                response = saudacao + "\n\n"
+            else:
+                response = ""
+
             termo = intent_classifier.extract_search_term(message)
             logger.info(f"Termo de busca: {termo}")
 
             result = tools_helper.buscar_produtos(termo or message, limite=5)
 
             if result["status"] == "success":
-                response = resp.formatar_produto_sem_emoji(result["produtos"])
+                # Adiciona uma introdução mais natural
+                if comeca_com_saudacao and not eh_so_saudacao:
+                    response += f"Vou te mandar a lista de {termo or 'produtos'}:\n\n"
+                response += resp.formatar_produto_sem_emoji(result["produtos"])
             else:
-                response = "Ops, tive um problema ao buscar produtos. Tente novamente."
+                response += "Ops, tive um problema ao buscar produtos. Tente novamente."
 
         elif intent == "adicionar_carrinho":
             qtd = intent_classifier.extract_quantity(message)
@@ -221,8 +294,11 @@ async def zapi_webhook(
             logger.warning("⚠️ Telefone não identificado")
             return {"success": False, "error": "Telefone não identificado"}
 
+        # Extrair timestamp da mensagem
+        timestamp = data.get("momment", None)
+
         # Processar e responder em background
-        background_tasks.add_task(process_and_respond, phone, message)
+        background_tasks.add_task(process_and_respond, phone, message, timestamp)
 
         return {
             "success": True,

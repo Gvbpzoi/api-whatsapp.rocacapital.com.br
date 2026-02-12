@@ -2,6 +2,42 @@
 Respostas personalizadas da Roça Capital (sem emojis)
 """
 
+from datetime import datetime
+
+
+def gerar_saudacao_contextual(hora_atual: int = None, tem_pedido: bool = False) -> str:
+    """
+    Gera saudação contextual baseada no horário e se a pessoa já fez um pedido.
+
+    Args:
+        hora_atual: Hora do dia (0-23). Se None, usa hora atual.
+        tem_pedido: Se True, a pessoa já disse o que quer. Se False, só mandou saudação.
+
+    Returns:
+        Saudação personalizada
+    """
+    if hora_atual is None:
+        hora_atual = datetime.now().hour
+
+    # Determinar saudação
+    if 5 <= hora_atual < 12:
+        saudacao = "Bom dia"
+    elif 12 <= hora_atual < 18:
+        saudacao = "Boa tarde"
+    else:
+        saudacao = "Boa noite"
+
+    # Nome do atendente
+    atendente = "Guilherme"
+
+    # Se a pessoa já disse o que quer, não pergunta "como posso ajudar"
+    if tem_pedido:
+        return f"{saudacao}! Você tá falando hoje com o {atendente}."
+    else:
+        # Se só mandou "bom dia" ou similar, pergunta o que precisa
+        return f"{saudacao}! Você tá falando hoje com o {atendente}. Como é que eu posso te ajudar?"
+
+
 SAUDACAO = """Oi, tudo bem? Bem-vindo à Roça Capital!
 
 A gente está aqui no Mercado Central de BH, bem na entrada da Av. Augusto de Lima com Curitiba.
