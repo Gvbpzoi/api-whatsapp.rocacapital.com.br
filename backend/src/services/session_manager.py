@@ -49,6 +49,11 @@ class SessionManager:
         self._sessions: Dict[str, SessionStatus] = {}
         self._auto_pause_timeout = 300  # 5min sem resposta do humano -> retoma bot
 
+        # Memória conversacional: histórico de mensagens por telefone
+        self._conversation_history: Dict[str, list] = {}
+        # Timeout para considerar "nova conversa" (em segundos)
+        self._new_conversation_timeout = 1800  # 30 minutos
+
     # ==================== Controle de Sessão ====================
 
     def get_session(self, phone: str) -> SessionStatus:
@@ -59,6 +64,78 @@ class SessionManager:
                 mode=SessionMode.AGENT
             )
         return self._sessions[phone]
+
+    # ==================== Memória Conversacional ====================
+
+    def add_to_history(self, phone: str, role: str, message: str):
+        """
+        Adiciona mensagem ao histórico da conversa.
+
+        Args:
+            phone: Número do telefone
+            role: "user" ou "assistant"
+            message: Conteúdo da mensagem
+        """
+        if phone not in self._conversation_history:
+            self._conversation_history[phone] = []
+
+        self._conversation_history[phone].append({
+            "role": role,
+            "content": message,
+            "timestamp": datetime.utcnow()
+        })
+
+        # Manter apenas últimas 20 mensagens para não crescer infinitamente
+        if len(self._conversation_history[phone]) > 20:
+            self._conversation_history[phone] = self._conversation_history[phone][-20:]
+
+    def is_new_conversation(self, phone: str) -> bool:
+        """
+        Verifica se é uma nova conversa (sem histórico recente).
+
+        Returns:
+            True se é nova conversa ou última mensagem foi há mais de 30min
+        """
+        if phone not in self._conversation_history:
+            return True
+
+        if not self._conversation_history[phone]:
+            return True
+
+        last_message = self._conversation_history[phone][-1]
+        time_since_last = datetime.utcnow() - last_message["timestamp"]
+
+        return time_since_last.total_seconds() > self._new_conversation_timeout
+
+    def has_recent_conversation(self, phone: str) -> bool:
+        """
+        Verifica se teve conversa recente (oposto de is_new_conversation).
+
+        Returns:
+            True se houve mensagens nos últimos 30 minutos
+        """
+        return not self.is_new_conversation(phone)
+
+    def get_conversation_history(self, phone: str, limit: int = 10) -> list:
+        """
+        Retorna histórico da conversa.
+
+        Args:
+            phone: Número do telefone
+            limit: Número máximo de mensagens a retornar
+
+        Returns:
+            Lista de mensagens mais recentes
+        """
+        if phone not in self._conversation_history:
+            return []
+
+        return self._conversation_history[phone][-limit:]
+
+    def clear_conversation(self, phone: str):
+        """Limpa histórico de conversa."""
+        if phone in self._conversation_history:
+            self._conversation_history[phone] = []
 
     def is_agent_active(self, phone: str) -> bool:
         """Verifica se o agente está ativo para essa conversa"""

@@ -54,6 +54,9 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
     try:
         logger.info(f"📨 Processando mensagem de {phone[:8]}...")
 
+        # Adicionar mensagem do usuário ao histórico
+        session_manager.add_to_history(phone, "user", message)
+
         # Verificar se agente deve responder
         session = session_manager.get_session(phone)
 
@@ -73,6 +76,8 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
         result = zapi.send_text(phone, response_text)
 
         if result["success"]:
+            # Adicionar resposta do bot ao histórico
+            session_manager.add_to_history(phone, "assistant", response_text)
             logger.info(f"✅ Resposta enviada para {phone[:8]}")
         else:
             logger.error(f"❌ Falha ao enviar resposta: {result.get('error')}")
@@ -127,6 +132,10 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         else:
             hora_mensagem = datetime.now().hour
 
+        # Verificar se é nova conversa ou continuação
+        is_nova_conversa = session_manager.is_new_conversation(phone)
+        logger.info(f"{'🆕 Nova conversa' if is_nova_conversa else '💬 Conversa contínua'} com {phone[:8]}")
+
         # Classificar intent
         intent = intent_classifier.classify(message)
         logger.info(f"🎯 Intent classificado: {intent}")
@@ -137,8 +146,12 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
 
         # Processar baseado no intent
         if intent == "atendimento_inicial":
-            # Se é só saudação, pergunta como pode ajudar
-            response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False)
+            # Se é conversa contínua e só saudação, responde de forma simples
+            if not is_nova_conversa and eh_so_saudacao:
+                response = "Oi! Em que posso te ajudar?"
+            else:
+                # Nova conversa ou saudação com pedido: saudação completa
+                response = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=False)
 
         elif intent == "informacao_loja":
             if comeca_com_saudacao and not eh_so_saudacao:
