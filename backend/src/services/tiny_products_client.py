@@ -58,18 +58,19 @@ class TinyProductsClient:
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                # Buscar produtos
+                # API v2 do Tiny usa form-encoded, não JSON
+                # Token vai no body, não no header
                 response = await client.post(
                     f"{self.BASE_URL}/produtos.pesquisa.php",
-                    headers=self._get_headers(),
-                    json={
+                    data={
                         "token": self.access_token,
-                        "formato": "json"
+                        "formato": "JSON"
                     }
                 )
 
                 if response.status_code != 200:
                     logger.error(f"❌ Erro na API Tiny: {response.status_code}")
+                    logger.error(f"❌ Response: {response.text[:500]}")
                     return []
 
                 data = response.json()
