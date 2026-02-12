@@ -1,16 +1,38 @@
 """
 Intent Classifier - Identifica qual Goal executar
+Usa LLM (OpenAI) para classificação robusta com fallback para regex
 """
 
 import re
+import os
 import logging
 from typing import Optional, Dict, Any
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
 class IntentClassifier:
     """Classifica intenção do usuário e mapeia para Goals"""
+
+    def __init__(self):
+        """Inicializa o classificador com cache e cliente OpenAI"""
+        # Cache de classificações para economizar tokens
+        # Key: mensagem normalizada, Value: intent classificado
+        self._classification_cache: Dict[str, str] = {}
+
+        # Cliente OpenAI (None se não configurado)
+        self.openai_client = None
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key and api_key != "sua-chave-openai-aqui":
+            try:
+                self.openai_client = OpenAI(api_key=api_key)
+                logger.info("✅ OpenAI configurado para classificação de intents")
+            except Exception as e:
+                logger.warning(f"⚠️ Falha ao inicializar OpenAI: {e}")
+                self.openai_client = None
+        else:
+            logger.info("ℹ️ OpenAI não configurado, usando apenas regex")
 
     # Padrões para cada intent/goal (ordem importa!)
     INTENT_PATTERNS = {
@@ -133,20 +155,92 @@ class IntentClassifier:
         ],
     }
 
-    def classify(self, message: str) -> str:
+    def _normalize_message(self, message: str) -> str:
+        """Normaliza mensagem para usar como chave de cache"""
+        return message.lower().strip()
+
+    def classify_with_llm(self, message: str) -> Optional[str]:
         """
-        Classifica mensagem e retorna intent (goal).
+        Classifica intent usando LLM (OpenAI).
 
         Args:
             message: Mensagem do usuário
 
         Returns:
-            Nome do goal (ex: "busca_produto")
+            Nome do intent ou None se falhar
+        """
+        if not self.openai_client:
+            return None
 
-        Example:
-            >>> classifier = IntentClassifier()
-            >>> intent = classifier.classify("Quero queijo canastra")
-            >>> print(intent)  # "busca_produto"
+        # Verificar cache
+        cache_key = self._normalize_message(message)
+        if cache_key in self._classification_cache:
+            cached_intent = self._classification_cache[cache_key]
+            logger.info(f"💾 Intent recuperado do cache: {cached_intent}")
+            return cached_intent
+
+        try:
+            # Prompt estruturado com todos os intents
+            prompt = f"""Você é um assistente que classifica mensagens de clientes da Roça Capital (loja de queijos e produtos artesanais).
+
+Classifique a mensagem abaixo em UMA dessas categorias (responda APENAS com o nome da categoria):
+
+- atendimento_inicial: saudações simples, agradecimentos (ex: "oi", "bom dia", "obrigado")
+- informacao_entrega: perguntas sobre entrega, prazo, frete, envio (ex: "como funciona a entrega?", "fazem entrega?")
+- informacao_loja: horário de funcionamento, localização, contato (ex: "qual o horário?", "onde fica?")
+- informacao_pagamento: formas de pagamento, desconto PIX, vale-alimentação (ex: "aceitam PIX?", "tem desconto?")
+- retirada_loja: retirada de pedido na loja (ex: "posso retirar na loja?")
+- rastreamento_pedido: código de rastreio, acompanhamento (ex: "onde está meu pedido?", "rastreamento")
+- armazenamento_queijo: como guardar/conservar queijo (ex: "como guardar o queijo?")
+- embalagem_presente: embalagens, caixas, presentes, kits (ex: "tem embalagem de presente?")
+- busca_produto: procura por produtos específicos (ex: "tem queijo canastra?", "quero cachaça")
+- adicionar_carrinho: adicionar item ao carrinho (ex: "adiciona 2 queijos")
+- ver_carrinho: visualizar carrinho (ex: "ver meu carrinho")
+- calcular_frete: calcular valor do frete (ex: "quanto custa o frete?")
+- finalizar_pedido: finalizar compra/pedido (ex: "quero finalizar", "fechar pedido")
+- consultar_pedido: consultar status de pedidos (ex: "meus pedidos", "status do pedido")
+
+Mensagem do cliente: "{message}"
+
+Categoria:"""
+
+            # Chamar OpenAI
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",  # Modelo rápido e barato
+                messages=[
+                    {"role": "system", "content": "Você classifica mensagens em categorias predefinidas. Responda APENAS com o nome da categoria, sem explicações."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0,  # Determinístico
+                max_tokens=20,  # Resposta curta
+            )
+
+            intent = response.choices[0].message.content.strip().lower()
+
+            # Validar se é um intent válido
+            valid_intents = list(self.INTENT_PATTERNS.keys())
+            if intent in valid_intents:
+                # Salvar no cache
+                self._classification_cache[cache_key] = intent
+                logger.info(f"🤖 Intent classificado por LLM: {intent}")
+                return intent
+            else:
+                logger.warning(f"⚠️ LLM retornou intent inválido: {intent}")
+                return None
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao classificar com LLM: {e}")
+            return None
+
+    def classify_with_regex(self, message: str) -> str:
+        """
+        Classifica intent usando regex (método tradicional).
+
+        Args:
+            message: Mensagem do usuário
+
+        Returns:
+            Nome do intent
         """
         message_lower = message.lower().strip()
 
@@ -154,13 +248,37 @@ class IntentClassifier:
         for intent, patterns in self.INTENT_PATTERNS.items():
             for pattern in patterns:
                 if re.search(pattern, message_lower):
-                    logger.info(f"🎯 Intent detectado: {intent} (padrão: {pattern[:30]}...)")
+                    logger.info(f"🎯 Intent detectado (regex): {intent}")
                     return intent
 
-        # Fallback: se não identificou nenhum intent específico
-        # Assume que é busca de produto (comportamento padrão)
-        logger.info("🤷 Intent não identificado, usando fallback: busca_produto")
+        # Fallback: busca de produto
+        logger.info("🤷 Intent não identificado (regex), usando fallback: busca_produto")
         return "busca_produto"
+
+    def classify(self, message: str) -> str:
+        """
+        Classifica mensagem usando LLM (se disponível) com fallback para regex.
+
+        Args:
+            message: Mensagem do usuário
+
+        Returns:
+            Nome do intent
+
+        Example:
+            >>> classifier = IntentClassifier()
+            >>> intent = classifier.classify("Quero queijo canastra")
+            >>> print(intent)  # "busca_produto"
+        """
+        # Tentar LLM primeiro
+        if self.openai_client:
+            llm_intent = self.classify_with_llm(message)
+            if llm_intent:
+                return llm_intent
+            logger.warning("⚠️ LLM falhou, usando fallback regex")
+
+        # Fallback: regex
+        return self.classify_with_regex(message)
 
     def extract_search_term(self, message: str) -> Optional[str]:
         """
@@ -295,20 +413,25 @@ class IntentClassifier:
 
 # Para testes
 if __name__ == "__main__":
-    classifier = IntentClassifier()
-
     # Testes
     test_cases = [
         "Oi, bom dia!",
+        "Sobre as entregas como funciona?",
         "Quero queijo canastra",
         "Adiciona 2 unidades",
         "Ver meu carrinho",
         "Quanto fica o frete?",
         "Quero finalizar o pedido",
         "Cadê meu pedido?",
+        "Vocês fazem entrega?",
+        "Qual o horário de funcionamento?",
     ]
 
     print("🧪 Testando Intent Classifier:\n")
+
+    # Testar com LLM (se disponível)
+    classifier = IntentClassifier()
+    print(f"🤖 OpenAI disponível: {'Sim' if classifier.openai_client else 'Não'}\n")
 
     for message in test_cases:
         intent = classifier.classify(message)
