@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from loguru import logger
 from dotenv import load_dotenv
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 from src.services.tiny_products_client import get_tiny_products_client
@@ -92,10 +92,20 @@ async def sincronizar_produtos():
 
         for produto in produtos:
             try:
-                # Verificar se produto já existe
+                # Preparar dados para produtos_site
+                # Pegar primeira imagem para imagem_url
+                imagens = produto.get("imagens", [])
+                imagem_url = imagens[0] if isinstance(imagens, list) and len(imagens) > 0 else None
+
+                # Converter peso para texto
+                peso_bruto = produto.get("peso_bruto", 0)
+                peso_liquido = produto.get("peso_liquido", 0)
+                peso = str(peso_bruto or peso_liquido or 0)
+
+                # Verificar se produto já existe (tiny_id é TEXT)
                 cursor.execute(
-                    "SELECT id FROM produtos WHERE tiny_id = %s",
-                    (produto["tiny_id"],)
+                    "SELECT id FROM produtos_site WHERE tiny_id = %s",
+                    (str(produto["tiny_id"]),)
                 )
 
                 existe = cursor.fetchone()
@@ -103,42 +113,36 @@ async def sincronizar_produtos():
                 if existe:
                     # Atualizar produto existente
                     cursor.execute("""
-                        UPDATE produtos SET
-                            sku = %s,
+                        UPDATE produtos_site SET
                             nome = %s,
                             descricao = %s,
                             preco = %s,
-                            preco_custo = %s,
                             preco_promocional = %s,
-                            categoria = %s,
-                            estoque_atual = %s,
-                            ativo = %s,
-                            imagens = %s,
+                            peso = %s,
                             unidade = %s,
-                            peso_kg = %s,
-                            ncm = %s,
-                            gtin = %s,
-                            fonte = %s,
-                            ultima_sync_tiny = NOW(),
-                            atualizado_em = NOW()
+                            imagem_url = %s,
+                            imagens_adicionais = %s,
+                            categoria = %s,
+                            estoque_disponivel = %s,
+                            quantidade_estoque = %s,
+                            ativo = %s,
+                            sincronizado_em = NOW(),
+                            updated_at = NOW()
                         WHERE tiny_id = %s
                     """, (
-                        produto["codigo"],
                         produto["nome"],
                         produto["descricao"],
                         produto["preco"],
-                        produto["preco_custo"],
                         produto["preco_promocional"],
-                        produto["categoria"],
-                        produto["estoque"],
-                        produto["ativo"],
-                        produto.get("imagens"),
+                        peso,
                         produto.get("unidade", "UN"),
-                        produto.get("peso_bruto", 0) or produto.get("peso_liquido", 0),
-                        produto.get("ncm", ""),
-                        produto.get("gtin", ""),
-                        "tiny",
-                        produto["tiny_id"]
+                        imagem_url,
+                        Json(imagens) if imagens else None,
+                        produto["categoria"],
+                        produto["estoque"] > 0,
+                        int(produto["estoque"]),
+                        produto["ativo"],
+                        str(produto["tiny_id"])
                     ))
                     atualizados += 1
                     logger.debug(f"✏️ Atualizado: {produto['nome']}")
@@ -146,34 +150,33 @@ async def sincronizar_produtos():
                 else:
                     # Inserir novo produto
                     cursor.execute("""
-                        INSERT INTO produtos (
-                            tiny_id, sku, nome, descricao,
-                            preco, preco_custo, preco_promocional,
-                            categoria, estoque_atual,
-                            ativo, imagens, unidade, peso_kg,
-                            ncm, gtin, fonte,
-                            disponivel_whatsapp, ultima_sync_tiny
+                        INSERT INTO produtos_site (
+                            tiny_id, nome, descricao,
+                            preco, preco_promocional,
+                            peso, unidade,
+                            imagem_url, imagens_adicionais,
+                            categoria,
+                            estoque_disponivel, quantidade_estoque,
+                            ativo, destaque,
+                            sincronizado_em, created_at, updated_at
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), NOW()
                         )
                     """, (
-                        produto["tiny_id"],
-                        produto["codigo"],
+                        str(produto["tiny_id"]),
                         produto["nome"],
                         produto["descricao"],
                         produto["preco"],
-                        produto["preco_custo"],
                         produto["preco_promocional"],
-                        produto["categoria"],
-                        produto["estoque"],
-                        produto["ativo"],
-                        produto.get("imagens"),
+                        peso,
                         produto.get("unidade", "UN"),
-                        produto.get("peso_bruto", 0) or produto.get("peso_liquido", 0),
-                        produto.get("ncm", ""),
-                        produto.get("gtin", ""),
-                        "tiny",
-                        True  # disponivel_whatsapp
+                        imagem_url,
+                        Json(imagens) if imagens else None,
+                        produto["categoria"],
+                        produto["estoque"] > 0,
+                        int(produto["estoque"]),
+                        produto["ativo"],
+                        False  # destaque
                     ))
                     novos += 1
                     logger.debug(f"➕ Novo: {produto['nome']}")
