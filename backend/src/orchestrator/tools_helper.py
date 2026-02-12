@@ -1,6 +1,6 @@
 """
 Tools Helper - Wrappers simplificados para as ferramentas GOTCHA
-Versão rápida para deploy inicial
+Versão rápida para deploy inicial - AGORA COM PRODUTOS REAIS DO SUPABASE
 """
 
 import os
@@ -9,6 +9,14 @@ from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Importar serviço de produtos Supabase
+try:
+    from src.services.supabase_produtos import get_supabase_produtos
+    SUPABASE_PRODUTOS_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ Módulo supabase_produtos não disponível - usando mock")
+    SUPABASE_PRODUTOS_AVAILABLE = False
 
 
 class ToolsHelper:
@@ -19,48 +27,41 @@ class ToolsHelper:
         Inicializa helper com clientes opcionais.
 
         Args:
-            supabase_client: Cliente Supabase (opcional)
+            supabase_client: Cliente Supabase (opcional - deprecated)
             tiny_client: Cliente Tiny (opcional)
         """
-        self.supabase = supabase_client
         self.tiny = tiny_client
 
-        # Mock data para desenvolvimento
+        # Novo serviço de produtos (direto com psycopg2)
+        if SUPABASE_PRODUTOS_AVAILABLE:
+            self.produtos_service = get_supabase_produtos()
+            logger.info("✅ Usando produtos reais do Supabase")
+        else:
+            self.produtos_service = None
+            logger.info("⚠️ Usando mock de produtos")
+
+        # Mock data para fallback (se Supabase não disponível)
         self.mock_produtos = [
             {
                 "id": "1",
                 "nome": "Queijo Canastra Meia-Cura 500g",
                 "preco": 45.00,
-                "estoque_atual": 15,
+                "quantidade_estoque": 15,
                 "categoria": "queijos"
             },
             {
                 "id": "2",
                 "nome": "Queijo Prato Artesanal 400g",
                 "preco": 35.00,
-                "estoque_atual": 8,
+                "quantidade_estoque": 8,
                 "categoria": "queijos"
             },
             {
                 "id": "3",
                 "nome": "Doce de Leite Tradicional 300g",
                 "preco": 18.00,
-                "estoque_atual": 20,
+                "quantidade_estoque": 20,
                 "categoria": "doces"
-            },
-            {
-                "id": "4",
-                "nome": "Cachaça Artesanal Ouro 700ml",
-                "preco": 65.00,
-                "estoque_atual": 10,
-                "categoria": "bebidas"
-            },
-            {
-                "id": "5",
-                "nome": "Café Torrado Moído Serra da Canastra 500g",
-                "preco": 32.00,
-                "estoque_atual": 12,
-                "categoria": "bebidas"
             }
         ]
 
@@ -69,7 +70,7 @@ class ToolsHelper:
 
     def buscar_produtos(self, termo: str, limite: int = 10) -> Dict[str, Any]:
         """
-        Busca produtos por termo.
+        Busca produtos por termo (AGORA COM DADOS REAIS DO SUPABASE).
 
         Args:
             termo: Termo de busca
@@ -79,33 +80,52 @@ class ToolsHelper:
             Dict com produtos encontrados
         """
         try:
-            logger.info(f"🔍 Buscando: {termo}")
+            logger.info(f"🔍 Buscando: '{termo}'")
 
-            # Se temos Supabase, usar ele
-            if self.supabase:
+            # Tentar usar serviço de produtos Supabase
+            if self.produtos_service:
                 try:
-                    result = self.supabase.table("produtos").select("*").ilike("nome", f"%{termo}%").limit(limite).execute()
-                    produtos = result.data if result.data else []
+                    produtos = self.produtos_service.buscar_produtos(
+                        termo=termo,
+                        limite=limite,
+                        apenas_disponiveis=True
+                    )
 
                     if produtos:
-                        logger.info(f"✅ Supabase: {len(produtos)} produtos")
-                        return {"status": "success", "produtos": produtos, "source": "supabase"}
+                        logger.info(f"✅ Supabase: {len(produtos)} produtos encontrados")
+                        return {
+                            "status": "success",
+                            "produtos": produtos,
+                            "source": "supabase",
+                            "total": len(produtos)
+                        }
+                    else:
+                        logger.info("ℹ️ Nenhum produto encontrado no Supabase")
+                        return {
+                            "status": "success",
+                            "produtos": [],
+                            "source": "supabase",
+                            "total": 0,
+                            "message": "Nenhum produto encontrado"
+                        }
+
                 except Exception as e:
-                    logger.warning(f"⚠️ Supabase falhou, usando mock: {e}")
+                    logger.warning(f"⚠️ Erro no Supabase, usando fallback mock: {e}")
 
             # Fallback: busca em mock data
             termo_lower = termo.lower()
             produtos_encontrados = [
                 p for p in self.mock_produtos
-                if termo_lower in p["nome"].lower() or termo_lower in p["categoria"].lower()
+                if termo_lower in p["nome"].lower() or termo_lower in p.get("categoria", "").lower()
             ][:limite]
 
-            logger.info(f"✅ Mock: {len(produtos_encontrados)} produtos")
+            logger.info(f"⚠️ Mock fallback: {len(produtos_encontrados)} produtos")
 
             return {
                 "status": "success",
                 "produtos": produtos_encontrados,
-                "source": "mock"
+                "source": "mock",
+                "total": len(produtos_encontrados)
             }
 
         except Exception as e:
@@ -114,11 +134,11 @@ class ToolsHelper:
 
     def adicionar_carrinho(self, telefone: str, produto_id: str, quantidade: int = 1) -> Dict[str, Any]:
         """
-        Adiciona produto ao carrinho.
+        Adiciona produto ao carrinho (AGORA COM PRODUTOS REAIS).
 
         Args:
             telefone: Telefone do cliente
-            produto_id: ID do produto
+            produto_id: ID do produto (UUID ou tiny_id)
             quantidade: Quantidade
 
         Returns:
@@ -131,24 +151,39 @@ class ToolsHelper:
             if telefone not in self.carrinhos:
                 self.carrinhos[telefone] = []
 
-            # Buscar produto
-            produto = next((p for p in self.mock_produtos if p["id"] == produto_id), None)
+            # Buscar produto no Supabase
+            produto = None
+            if self.produtos_service:
+                try:
+                    produto = self.produtos_service.buscar_produto_por_id(produto_id)
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro ao buscar produto {produto_id}: {e}")
+
+            # Fallback: buscar em mock
+            if not produto:
+                produto = next((p for p in self.mock_produtos if str(p["id"]) == str(produto_id)), None)
 
             if not produto:
                 return {"status": "error", "message": "Produto não encontrado"}
 
             # Verificar estoque
-            if produto["estoque_atual"] < quantidade:
+            estoque = produto.get("quantidade_estoque", 0)
+            if estoque < quantidade:
                 return {
                     "status": "error",
-                    "message": f"Estoque insuficiente. Disponível: {produto['estoque_atual']}"
+                    "message": f"Estoque insuficiente. Disponível: {estoque} unidades"
                 }
+
+            # Usar preço promocional se disponível
+            preco = produto.get("preco_promocional") or produto.get("preco", 0)
 
             # Adicionar ao carrinho
             self.carrinhos[telefone].append({
-                "produto": produto,
+                "produto_id": str(produto.get("id")),
+                "nome": produto.get("nome"),
+                "preco_unitario": float(preco),
                 "quantidade": quantidade,
-                "subtotal": produto["preco"] * quantidade
+                "subtotal": float(preco) * quantidade
             })
 
             logger.info(f"✅ Produto adicionado. Total itens: {len(self.carrinhos[telefone])}")
