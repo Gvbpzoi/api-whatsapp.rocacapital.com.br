@@ -35,6 +35,43 @@ class TinyProductsClient:
             "Content-Type": "application/json"
         }
 
+    async def obter_produto(self, produto_id: str) -> Optional[Dict]:
+        """
+        Obtém detalhes completos de um produto (incluindo observacoes)
+
+        Args:
+            produto_id: ID do produto no Tiny
+
+        Returns:
+            Dados completos do produto ou None se erro
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/produto.obter.php",
+                    data={
+                        "token": self.token,
+                        "id": produto_id,
+                        "formato": "JSON"
+                    }
+                )
+
+                if response.status_code != 200:
+                    logger.error(f"❌ Erro ao obter produto {produto_id}: {response.status_code}")
+                    return None
+
+                data = response.json()
+
+                if data.get("retorno", {}).get("status") == "OK":
+                    return data.get("retorno", {}).get("produto", {})
+                else:
+                    logger.error(f"❌ Erro Tiny produto {produto_id}: {data.get('retorno', {}).get('erro')}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"❌ Exceção ao obter produto {produto_id}: {e}")
+            return None
+
     async def listar_produtos(self, limite: int = 50) -> List[Dict]:
         """
         Lista produtos do Tiny ERP
@@ -77,19 +114,33 @@ class TinyProductsClient:
 
                 produtos_raw = data.get("retorno", {}).get("produtos", [])
 
-                # Filtrar produtos
+                # Filtrar produtos buscando detalhes completos
                 produtos_filtrados = []
                 total = len(produtos_raw)
                 ignorados = 0
 
-                for item in produtos_raw[:limite]:
-                    produto = item.get("produto", {})
+                logger.info(f"📦 Processando {min(len(produtos_raw), limite)} produtos...")
 
-                    if self._eh_produto_site(produto):
-                        produtos_filtrados.append(self._normalizar_produto(produto))
+                for item in produtos_raw[:limite]:
+                    produto_resumo = item.get("produto", {})
+                    produto_id = produto_resumo.get("id")
+
+                    if not produto_id:
+                        logger.warning(f"⚠️ Produto sem ID: {produto_resumo.get('codigo')}")
+                        ignorados += 1
+                        continue
+
+                    # Buscar detalhes completos (com observacoes)
+                    produto_completo = await self.obter_produto(produto_id)
+
+                    if not produto_completo:
+                        ignorados += 1
+                        continue
+
+                    if await self._eh_produto_site_async(produto_completo):
+                        produtos_filtrados.append(self._normalizar_produto(produto_completo))
                     else:
                         ignorados += 1
-                        logger.debug(f"⏭️ Ignorando: {produto.get('codigo')}")
 
                 logger.info(
                     f"✅ Sincronização concluída: {len(produtos_filtrados)} produtos do site, "
@@ -102,29 +153,37 @@ class TinyProductsClient:
             logger.error(f"❌ Erro ao buscar produtos: {e}")
             return []
 
-    def _eh_produto_site(self, produto: Dict) -> bool:
+    async def _eh_produto_site_async(self, produto: Dict) -> bool:
         """
-        NOVA REGRA SIMPLIFICADA:
-        ✅ IMPORTA: Se campo "obs" contém a palavra "site"
-        ❌ IGNORA: Se campo "obs" NÃO contém "site"
+        NOVA REGRA: Verifica campo "observacoes" (detalhes completos)
+        ✅ IMPORTA: Se "observacoes" contém "site"
+        ❌ IGNORA: Se NÃO contém
 
         Args:
-            produto: Dados do produto do Tiny
+            produto: Dados COMPLETOS do produto (de obter_produto)
 
         Returns:
             True se produto deve ser importado
         """
-        obs = (produto.get("obs") or "").lower()
-        codigo = produto.get("codigo", "SEM_CODIGO")
+        # Tentar vários nomes possíveis do campo
+        obs = (
+            produto.get("observacoes") or
+            produto.get("observacao") or
+            produto.get("obs") or
+            ""
+        ).lower().strip()
 
-        # Log para debug: mostrar o que vem no campo obs
-        logger.debug(f"🔍 Produto {codigo} | obs='{obs[:50] if obs else 'VAZIO'}'")
+        produto_id = produto.get("id", "?")
+        codigo = produto.get("codigo") or "-"
+
+        # Log para debug
+        logger.debug(f"🔍 id={produto_id} codigo={codigo} | obs='{obs[:50] if obs else 'VAZIO'}'")
 
         if "site" in obs:
-            logger.info(f"✅ Produto do SITE: {codigo}")
+            logger.info(f"✅ SITE: id={produto_id} codigo={codigo}")
             return True
 
-        logger.debug(f"⏭️ Ignorando {codigo}: não tem 'site' nas obs")
+        logger.debug(f"⏭️ Ignorando: id={produto_id} (sem 'site')")
         return False
 
     def _normalizar_produto(self, produto: Dict) -> Dict:
