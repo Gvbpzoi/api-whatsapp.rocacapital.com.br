@@ -2,148 +2,133 @@
 Respostas personalizadas da Roça Capital (sem emojis)
 """
 
-SAUDACAO = """Olá! Bem-vindo à Roça Capital.
+SAUDACAO = """Oi, tudo bem? Bem-vindo à Roça Capital!
 
-Estamos no Mercado Central de BH, bem na entrada da Augusto de Lima com Curitiba.
+A gente está aqui no Mercado Central de BH, bem na entrada da Av. Augusto de Lima com Curitiba.
 
-Temos queijos artesanais mineiros, produtos sem conservantes e muito carinho em cada pedido.
+Trabalhamos com queijos artesanais mineiros, produtos sem conservantes e muito carinho em cada pedido que sai daqui.
 
-Como posso te ajudar hoje?"""
+Me conta, como posso te ajudar hoje?"""
 
 
-INFORMACAO_LOJA = """ROÇA CAPITAL - Mercado Central de BH
+INFORMACAO_LOJA = """Olha, a gente está localizado no Mercado Central de BH, bem na entrada da Av. Augusto de Lima com Curitiba. É bem fácil de achar!
 
-LOCALIZAÇÃO
-Av. Augusto de Lima esquina com Curitiba
-Bem na entrada do Mercado Central
+Nosso horário de funcionamento:
+- Segunda a sexta: 8h às 18h
+- Feriados: 8h às 13h
 
-HORÁRIO
-Segunda a sexta: 8h às 18h
-Feriados: 8h às 13h
-
-CONTATOS
+Se precisar falar com a gente:
 WhatsApp: (31) 9 9847-21890
 E-mail: sac@rocacapital.com.br
-Site: https://rocacapital.com.br"""
+Site: https://rocacapital.com.br
+
+Quer saber mais alguma coisa?"""
 
 
-INFORMACAO_ENTREGA = """ENTREGA EM BH
+INFORMACAO_ENTREGA = """Oi, bom dia! A gente faz entrega sim.
 
-Pedidos confirmados até 16h (segunda a sexta) saem no mesmo dia.
+Nossas entregas funcionam dessa forma:
+Se a compra for feita até 16h (segunda a sexta), ela sai no mesmo dia. Pedidos depois desse horário, a gente entrega no dia seguinte.
 
-A entrega acontece entre 8h e 18h em rota otimizada. Não temos horário fixo, a não ser que você tenha solicitado entrega urgente.
+A entrega acontece entre 8h e 18h em rota otimizada. A gente não tem horário fixo, a não ser que você tenha pedido entrega urgente, combinado?
 
-Quando o pedido sair da loja, avisamos por WhatsApp e e-mail, combinado?
+Quando o pedido sair daqui da loja, a gente avisa você por WhatsApp e e-mail, tranquilo?
 
-ENTREGA FORA DE BH
+Ah, e se você for de fora de BH: a gente entrega sim, mas depende da região. Me passa seu CEP que eu verifico pra você, beleza?
 
-Entregamos sim, mas depende da região. Me envia seu CEP que verifico pra você.
-
-Detalhe importante: Se o prazo ultrapassar 3 dias, não recomendamos enviar queijo, para garantir que ele chegue perfeito até você."""
-
-
-RETIRADA_LOJA = """RETIRADA NA LOJA
-
-Geralmente em 1 hora após a compra já está liberado.
-
-A última separação do dia acontece às 17h.
-
-ONDE ESTAMOS
-Mercado Central de Belo Horizonte
-Av. Augusto de Lima esquina com Curitiba - bem na entrada"""
+Só um detalhe importante: se o prazo de entrega ultrapassar 3 dias, a gente não recomenda enviar queijo não, sabe? É que nossos queijos são artesanais, sem conservantes, então a gente prefere garantir que ele chegue perfeito até você."""
 
 
-RASTREAMENTO = """CÓDIGO DE RASTREIO
+RETIRADA_LOJA = """Maravilha! Você pode retirar aqui na loja sim.
 
-Assim que o pedido é postado, você recebe o código de rastreio por e-mail. É só acompanhar pelo link enviado.
+Geralmente em 1 hora depois da compra o pedido já está liberado pra você pegar. A última separação do dia a gente faz às 17h, beleza?
 
-Me informa por favor:
+A gente está no Mercado Central de Belo Horizonte, na Av. Augusto de Lima esquina com Curitiba - bem na entrada mesmo, é fácil de achar!"""
+
+
+RASTREAMENTO = """Ah sim! Olha, assim que a gente posta o pedido, você recebe o código de rastreio por e-mail. É só acompanhar pelo link que a gente envia.
+
+Me dá só um minutinho? Me passa as seguintes informações que eu consulto aqui no sistema pra você:
 - Seu nome completo
 - O número do pedido
 
-Que eu verifico no sistema pra você rapidinho."""
+Já já eu te passo as informações, combinado?"""
 
 
-INFORMACAO_PAGAMENTO = """FORMAS DE PAGAMENTO
+INFORMACAO_PAGAMENTO = """Olha, sobre pagamento:
 
-DESCONTO NO PIX
-5% de desconto no Pix para compras acima de R$ 499,90
+Se você pagar no Pix e a compra for acima de R$ 499,90, a gente dá 5% de desconto. Vale a pena, né?
 
-VALE-ALIMENTAÇÃO
-Ainda não aceitamos vale-alimentação, infelizmente.
+Sobre vale-alimentação: infelizmente a gente ainda não aceita, mas estamos trabalhando nisso!
 
-CONFIRMAÇÃO DE PAGAMENTO
-Se você não recebeu o e-mail de confirmação, me passa o número do pedido que eu verifico para você."""
+Ah, e se você não recebeu o e-mail de confirmação de pagamento, me passa o número do pedido que eu verifico aqui pra você, tranquilo?"""
 
 
-ARMAZENAMENTO_QUEIJO = """COMO ARMAZENAR SEU QUEIJO
+ARMAZENAMENTO_QUEIJO = """Que bom que você perguntou! Olha, os nossos queijos são artesanais, sem conservantes. Ele é um alimento vivo - e isso é o que faz ele ser tão especial, sabe?
 
-Você está levando um queijo artesanal, sem conservantes. Ele é um alimento vivo - e isso é o que faz ele ser especial.
+O segredo pra conservar bem é controlar a temperatura e a umidade. Deixa eu te explicar:
 
-O segredo é controlar temperatura e umidade.
+QUEIJOS SEMI-DUROS E DUROS:
+A gente recomenda guardar numa vasilha plástica com tampa, com papel-toalha no fundo pra absorver o excesso de umidade. Guarda na geladeira, beleza?
 
-QUEIJOS SEMI-DUROS E DUROS
-- Vasilha plástica com tampa
-- Papel-toalha no fundo para absorver excesso de umidade
-- Guardar na geladeira
-- Pode usar plástico filme se for consumir rápido, mas ele costuma ressecar mais
-- NÃO congelar
+Você pode usar plástico filme se for consumir rápido, mas ele costuma ressecar mais o queijo. Ah, e por favor, NÃO congela, combinado?
 
-QUEIJOS CREMOSOS E FRESCOS
-- Guardar na geladeira (5º a 7º)
-- Recipiente plástico com leve abertura para circular o ar
-- Papel-toalha no fundo para absorver excesso de umidade
-- NÃO congelar
+QUEIJOS CREMOSOS E FRESCOS:
+Esses você guarda na geladeira (entre 5º e 7º), num recipiente plástico com uma leve abertura pra circular o ar. Papel-toalha no fundo também, pra absorver a umidade. E não congela também, viu?
 
-QUEIJO MINAS ARTESANAL (ex: Canastra)
-Se você mora em um lugar mais fresco, pode deixar fora da geladeira:
-- Sobre tábua de madeira
-- Coberto com queijeira
-- Virar a cada 2 dias
-- Controlar a umidade
+QUEIJO MINAS ARTESANAL (tipo Canastra):
+Agora, se você mora num lugar mais fresco, pode até deixar ele fora da geladeira:
+- Deixa sobre uma tábua de madeira
+- Cobre com uma queijeira
+- Vira ele a cada 2 dias
+- Controla bem a umidade
 
-Assim ele vai maturando, ganhando textura e sabor."""
+Assim ele vai maturando, ganhando textura e sabor. Fica uma delícia!
+
+Qualquer dúvida, pode perguntar!"""
 
 
-EMBALAGEM_PRESENTE = """EMBALAGENS E PRESENTES
+EMBALAGEM_PRESENTE = """Temos sim! A gente trabalha com caixas personalizadas com a logo da loja.
 
-CAIXAS PERSONALIZADAS
-Temos caixas personalizadas com a logo da loja.
-
-Você também pode comprar embalagens aqui:
+Vou te mandar um link aqui que tem todos os modelos que a gente trabalha:
 https://rocacapital.com.br/collections/embalagens-para-presente
 
-CESTAS E KITS
-Olha nossas opções aqui:
-https://rocacapital.com.br/collections/kit"""
+Se você quiser ver também nossas cestas e kits prontos, olha aqui:
+https://rocacapital.com.br/collections/kit
+
+Dá uma olhada e me fala qual te interessa!"""
 
 
-CATALOGO = """CATÁLOGO COMPLETO
-
-Nosso catálogo completo está aqui:
+CATALOGO = """Olha, nosso catálogo completo está aqui:
 https://rocacapital.com.br/collections
 
-BOLOS, BROAS E MASSA DE PÃO DE QUEIJO
-Fala direto com o Eder: (31) 9 9511-5678"""
+Tem bastante coisa legal pra você ver!
+
+Ah, e se você quiser saber sobre bolos, broas e massa de pão de queijo, é melhor falar direto com o Eder: (31) 9 9511-5678
+
+Ele cuida dessa parte com muito carinho!"""
 
 
 def formatar_produto_sem_emoji(produtos: list) -> str:
     """Formata lista de produtos sem emojis"""
     if not produtos:
-        return """Não encontrei nenhum produto com esse termo.
+        return """Puxa, não encontrei nenhum produto com esse termo não.
 
-Tente buscar por: queijo, cachaça, doce, café...
+Tenta buscar por: queijo, cachaça, doce, café...
 
-Ou veja nosso catálogo completo: https://rocacapital.com.br/collections"""
+Ou então dá uma olhada no nosso catálogo completo: https://rocacapital.com.br/collections"""
 
-    response = f"Encontrei {len(produtos)} produto{'s' if len(produtos) > 1 else ''}:\n\n"
+    if len(produtos) == 1:
+        response = "Olha, encontrei esse aqui:\n\n"
+    else:
+        response = f"Opa! Encontrei {len(produtos)} produtos:\n\n"
 
     for i, p in enumerate(produtos, 1):
         response += f"{i}. *{p['nome']}*\n"
         response += f"   R$ {p['preco']:.2f}\n"
         response += f"   {int(p['estoque_atual'])} em estoque\n\n"
 
-    response += "Qual te interessa? Digite o número ou nome."
+    response += "Qual desses te interessa? Me fala o número ou o nome que eu te ajudo."
 
     return response
 
@@ -151,12 +136,12 @@ Ou veja nosso catálogo completo: https://rocacapital.com.br/collections"""
 def formatar_carrinho_sem_emoji(carrinho_data: dict) -> str:
     """Formata carrinho sem emojis"""
     if carrinho_data.get("vazio"):
-        return """Seu carrinho está vazio.
+        return """Olha, seu carrinho está vazio ainda.
 
-Que tal buscar alguns produtos?
+Que tal dar uma olhada nos nossos produtos?
 https://rocacapital.com.br/collections"""
 
-    response = "*Seu Carrinho:*\n\n"
+    response = "*Aqui está seu carrinho:*\n\n"
 
     for i, item in enumerate(carrinho_data["carrinho"], 1):
         produto = item["produto"]
@@ -165,40 +150,40 @@ https://rocacapital.com.br/collections"""
         response += f"   Subtotal: R$ {item['subtotal']:.2f}\n\n"
 
     response += f"*Total: R$ {carrinho_data['total']:.2f}*\n\n"
-    response += "Quer finalizar o pedido?"
+    response += "E aí, quer finalizar o pedido?"
 
     return response
 
 
 def formatar_pedido_finalizado_sem_emoji(pedido: dict) -> str:
     """Formata confirmação de pedido sem emojis"""
-    return f"""*Pedido Finalizado!*
+    return f"""*Maravilha! Seu pedido foi finalizado!*
 
-Número: {pedido['numero']}
+Número do pedido: {pedido['numero']}
 Total: R$ {pedido['total']:.2f}
-Pagamento: {pedido['metodo_pagamento'].upper()}
+Forma de pagamento: {pedido['metodo_pagamento'].upper()}
 
-Em instantes você receberá o QR Code PIX para pagamento.
+Em instantes você vai receber o QR Code PIX para fazer o pagamento, combinado?
 
-Obrigado pela preferência!"""
+Muito obrigado pela preferência! A gente se vê em breve."""
 
 
 def formatar_pedidos_sem_emoji(pedidos: list) -> str:
     """Formata lista de pedidos sem emojis"""
     if not pedidos:
-        return """Você ainda não tem pedidos.
+        return """Olha, você ainda não tem nenhum pedido com a gente.
 
-Que tal fazer seu primeiro pedido?
+Que tal fazer seu primeiro pedido? Vai ser um prazer te atender!
 https://rocacapital.com.br/collections"""
 
-    response = "*Seus Pedidos:*\n\n"
+    response = "*Aqui estão seus pedidos:*\n\n"
 
     for pedido in pedidos:
-        response += f"{pedido['numero']}\n"
-        response += f"R$ {pedido['total']:.2f}\n"
+        response += f"Pedido: {pedido['numero']}\n"
+        response += f"Valor: R$ {pedido['total']:.2f}\n"
         response += f"Status: {pedido['status']}\n"
         response += f"Data: {pedido['criado_em'][:10]}\n\n"
 
-    response += "Alguma dúvida sobre seus pedidos?"
+    response += "Tem alguma dúvida sobre algum desses pedidos? Pode perguntar!"
 
     return response
