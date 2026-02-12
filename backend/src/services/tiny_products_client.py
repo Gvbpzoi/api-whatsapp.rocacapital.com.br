@@ -20,22 +20,12 @@ class TinyProductsClient:
 
     def __init__(self):
         """Inicializa o cliente com credenciais do ambiente"""
-        self.client_id = os.getenv("TINY_CLIENT_ID")
-        self.client_secret = os.getenv("TINY_CLIENT_SECRET")
-        self.oauth_tokens = os.getenv("TINY_OAUTH_TOKENS")
+        # API v2 usa token simples, não OAuth
+        self.token = os.getenv("TINY_TOKEN")
 
-        if not self.oauth_tokens:
-            logger.warning("⚠️ TINY_OAUTH_TOKENS não configurado")
-
-        # Decode base64 tokens
-        if self.oauth_tokens:
-            import base64
-            decoded = base64.b64decode(self.oauth_tokens).decode('utf-8')
-            # Split apenas no primeiro ':' para permitir ':' no token
-            self.access_token, self.refresh_token = decoded.split(':', 1)
-        else:
-            self.access_token = None
-            self.refresh_token = None
+        if not self.token:
+            logger.warning("⚠️ TINY_TOKEN não configurado")
+            logger.info("💡 Configure TINY_TOKEN com seu token da API v2 do Tiny")
 
     def _get_headers(self) -> Dict[str, str]:
         """Retorna headers para requisições"""
@@ -59,11 +49,11 @@ class TinyProductsClient:
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # API v2 do Tiny usa form-encoded, não JSON
-                # Token vai no body, não no header
+                # Token simples no body
                 response = await client.post(
                     f"{self.BASE_URL}/produtos.pesquisa.php",
                     data={
-                        "token": self.access_token,
+                        "token": self.token,
                         "formato": "JSON"
                     }
                 )
