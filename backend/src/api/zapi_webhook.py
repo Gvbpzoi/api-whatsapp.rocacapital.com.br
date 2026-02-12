@@ -241,6 +241,34 @@ def _extrair_nome_cliente(message: str, historico: list) -> Optional[str]:
     return None
 
 
+def _detectar_pergunta_generica_produtos(message: str) -> bool:
+    """
+    Detecta se o cliente está perguntando de forma genérica sobre produtos
+    (sem especificar um produto), ex: "quais queijos você tem?", "o que você tem?"
+    """
+    mensagem_lower = message.lower()
+    padroes_genericos = [
+        r"quais? queijos? (você |voce |vc )?tem",
+        r"que queijos? (você |voce |vc )?tem",
+        r"o que (você |voce |vc )?tem",
+        r"tem quai(s|l)",
+        r"(o que|que) .*disponível",
+        r"(o que|que) .*disponiveis",
+        r"teria alguma sugest(ão|ao)",
+        r"pode sugerir",
+        r"me sugere",
+        r"tipos? de queijo",
+        r"variedades? de queijo",
+        r"opcoes de queijo",
+        r"opções de queijo",
+    ]
+
+    for padrao in padroes_genericos:
+        if re.search(padrao, mensagem_lower):
+            return True
+    return False
+
+
 def _detectar_despedida(message: str) -> bool:
     """
     Detecta se o cliente está se despedindo ou encerrando conversa.
@@ -404,25 +432,31 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             response = resp.EMBALAGEM_PRESENTE
 
         elif intent == "busca_produto":
-            # Se começou com saudação, adiciona saudação contextual primeiro
-            if comeca_com_saudacao and not eh_so_saudacao:
-                saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo)
-                response = saudacao + "\n\n"
+            # Verificar se é pergunta genérica sobre produtos (sem termo específico)
+            if _detectar_pergunta_generica_produtos(message):
+                logger.info("📦 Detectada pergunta genérica sobre produtos")
+                response = resp.RESPOSTA_PRODUTOS_DISPONIVEIS
             else:
-                response = ""
-
-            termo = intent_classifier.extract_search_term(message)
-            logger.info(f"Termo de busca: {termo}")
-
-            result = tools_helper.buscar_produtos(termo or message, limite=5)
-
-            if result["status"] == "success":
-                # Adiciona uma introdução mais natural
+                # Busca específica
+                # Se começou com saudação, adiciona saudação contextual primeiro
                 if comeca_com_saudacao and not eh_so_saudacao:
-                    response += f"Vou te mandar a lista de {termo or 'produtos'}:\n\n"
-                response += resp.formatar_produto_sem_emoji(result["produtos"])
-            else:
-                response += "Ops, tive um problema ao buscar produtos. Tente novamente."
+                    saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo)
+                    response = saudacao + "\n\n"
+                else:
+                    response = ""
+
+                termo = intent_classifier.extract_search_term(message)
+                logger.info(f"🔍 Termo de busca: {termo}")
+
+                result = tools_helper.buscar_produtos(termo or message, limite=5)
+
+                if result["status"] == "success":
+                    # Adiciona uma introdução mais natural
+                    if comeca_com_saudacao and not eh_so_saudacao:
+                        response += f"Vou te mandar a lista de {termo or 'produtos'}:\n\n"
+                    response += resp.formatar_produto_sem_emoji(result["produtos"])
+                else:
+                    response += "Ops, tive um problema ao buscar produtos. Tente novamente."
 
         elif intent == "adicionar_carrinho":
             qtd = intent_classifier.extract_quantity(message)

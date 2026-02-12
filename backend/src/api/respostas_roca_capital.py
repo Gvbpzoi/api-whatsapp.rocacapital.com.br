@@ -248,3 +248,14 @@ RESPOSTA_DESPEDIDA = """Maravilha! Qualquer dúvida, é só voltar aqui. Fico à
 RESPOSTA_NOME_E_DESPEDIDA = """Você tá falando com o Guilherme! Maravilha, dá uma olhada com calma e qualquer dúvida é só voltar aqui.
 
 Ah, e qual é o seu nome?"""
+
+RESPOSTA_PRODUTOS_DISPONIVEIS = """A gente trabalha com cerca de 700 produtos! Os principais são:
+
+Queijos artesanais mineiros (Canastra, Araxá, Serro, meia-cura, curado...)
+Cachaças de alambique
+Doces caseiros (goiabada, doce de leite, mel...)
+Cafés especiais
+
+Você tá procurando algo específico? Me fala o que te interessa que eu te ajudo!
+
+Ou se preferir ver tudo, dá uma olhada aqui: https://rocacapital.com.br/collections"""
