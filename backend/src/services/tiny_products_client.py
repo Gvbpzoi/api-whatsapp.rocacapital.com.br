@@ -205,12 +205,40 @@ class TinyProductsClient:
         """
         Normaliza dados do Tiny para formato Supabase (tabela produtos_site)
 
+        Estrutura da resposta Tiny:
+        - anexos: [{"anexo": "url"}]
+        - imagens_externas: [{"imagem_externa": {"url": "url"}}]
+        - descricao_complementar: texto com harmonizações, textura, etc
+
         Args:
             produto: Produto do Tiny (retorno completo de produto.obter.php)
 
         Returns:
             Produto normalizado para schema Supabase
         """
+        # Processar imagens do Tiny (anexos + imagens_externas)
+        imagens_urls = []
+
+        # Anexos (imagens do Tiny)
+        anexos = produto.get("anexos", [])
+        if isinstance(anexos, list):
+            for item in anexos:
+                if isinstance(item, dict):
+                    url = item.get("anexo", "")
+                    if url:
+                        imagens_urls.append(url)
+
+        # Imagens externas
+        imagens_ext = produto.get("imagens_externas", [])
+        if isinstance(imagens_ext, list):
+            for item in imagens_ext:
+                if isinstance(item, dict):
+                    img_obj = item.get("imagem_externa", {})
+                    if isinstance(img_obj, dict):
+                        url = img_obj.get("url", "")
+                        if url:
+                            imagens_urls.append(url)
+
         return {
             "tiny_id": int(produto.get("id", 0)),
             "codigo": produto.get("codigo", ""),
@@ -227,7 +255,7 @@ class TinyProductsClient:
             "categoria": produto.get("categoria", ""),
             "ncm": produto.get("ncm", ""),
             "estoque": float(produto.get("estoque", 0) or 0),
-            "imagens": produto.get("imagens", []),
+            "imagens": imagens_urls,  # Array de URLs processado de anexos + imagens_externas
             "url_produto": produto.get("url_produto", ""),
             "link_produto": produto.get("link_produto", ""),
             "ativo": produto.get("situacao") == "A"
