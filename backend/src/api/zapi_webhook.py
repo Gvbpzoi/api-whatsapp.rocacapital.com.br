@@ -173,6 +173,54 @@ def _detectar_localizacao(message: str) -> str:
     return "desconhecido"
 
 
+def _detectar_pergunta_nome(message: str) -> bool:
+    """
+    Detecta se o cliente está perguntando o nome do atendente.
+    """
+    mensagem_lower = message.lower()
+    padroes_nome = [
+        r"com quem (eu )?falo",
+        r"com quem (eu )?to falando",
+        r"com quem (eu )?estou falando",
+        r"qual (o |é o )?seu nome",
+        r"quem (é|e) (você|voce|vc)",
+        r"você (é|e) quem",
+        r"seu nome",
+        r"como (você|voce|vc) se chama",
+    ]
+
+    for padrao in padroes_nome:
+        if re.search(padrao, mensagem_lower):
+            return True
+    return False
+
+
+def _detectar_despedida(message: str) -> bool:
+    """
+    Detecta se o cliente está se despedindo ou encerrando conversa.
+    """
+    mensagem_lower = message.lower()
+    padroes_despedida = [
+        r"vou (dar uma )?olha(r|da)",
+        r"vou ver",
+        r"vou olhar (o |os )?produtos?",
+        r"vou olhar (o |no )?site",
+        r"vou pensar",
+        r"depois (eu )?volto",
+        r"(até|ate) (logo|mais|breve)",
+        r"tchau",
+        r"obrigad[oa].*tchau",
+        r"falou",
+        r"valeu.*tchau",
+        r"vo(u|lto) (mais tarde|depois)",
+    ]
+
+    for padrao in padroes_despedida:
+        if re.search(padrao, mensagem_lower):
+            return True
+    return False
+
+
 async def _process_with_agent(phone: str, message: str, timestamp: int = None) -> str:
     """
     Processa mensagem com o agente (GOTCHA Engine).
@@ -191,6 +239,19 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         # Verificar se é nova conversa ou continuação
         is_nova_conversa = session_manager.is_new_conversation(phone)
         logger.info(f"{'🆕 Nova conversa' if is_nova_conversa else '💬 Conversa contínua'} com {phone[:8]}")
+
+        # VERIFICAÇÕES ESPECIAIS (antes da classificação de intent)
+        # Essas têm prioridade sobre a classificação genérica
+
+        # Verificar se está perguntando o nome do atendente
+        if _detectar_pergunta_nome(message):
+            logger.info("🏷️ Detectada pergunta sobre nome do atendente")
+            return resp.RESPOSTA_NOME_ATENDENTE
+
+        # Verificar se está se despedindo
+        if _detectar_despedida(message):
+            logger.info("👋 Detectada despedida")
+            return resp.RESPOSTA_DESPEDIDA
 
         # Classificar intent
         intent = intent_classifier.classify(message)

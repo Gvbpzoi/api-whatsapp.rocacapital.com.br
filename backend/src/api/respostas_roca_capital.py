@@ -229,3 +229,9 @@ https://rocacapital.com.br/collections"""
     response += "Tem alguma dúvida sobre algum desses pedidos? Pode perguntar!"
 
     return response
+
+
+# Respostas específicas para contextos especiais
+RESPOSTA_NOME_ATENDENTE = """Você tá falando com o Guilherme! Qualquer coisa é só chamar."""
+
+RESPOSTA_DESPEDIDA = """Maravilha! Qualquer dúvida, é só voltar aqui. Fico à disposição!"""
