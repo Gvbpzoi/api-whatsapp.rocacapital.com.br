@@ -103,12 +103,13 @@ class SupabaseProdutos:
                 params.append(categoria)
 
             # Filtro: termo de busca (nome, descrição, categoria)
+            # Usa UNACCENT para ignorar acentos: "cafes" encontra "Café" ✅
             if termo:
                 query += """
                     AND (
-                        LOWER(nome) LIKE LOWER(%s)
-                        OR LOWER(descricao) LIKE LOWER(%s)
-                        OR LOWER(categoria) LIKE LOWER(%s)
+                        unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
+                        OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                        OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                     )
                 """
                 termo_like = f"%{termo}%"
