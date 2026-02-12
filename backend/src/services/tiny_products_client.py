@@ -203,19 +203,20 @@ class TinyProductsClient:
 
     def _normalizar_produto(self, produto: Dict) -> Dict:
         """
-        Normaliza dados do Tiny para formato Supabase (tabela produtos)
+        Normaliza dados do Tiny para formato Supabase (tabela produtos_site)
 
         Args:
-            produto: Produto do Tiny
+            produto: Produto do Tiny (retorno completo de produto.obter.php)
 
         Returns:
             Produto normalizado para schema Supabase
         """
         return {
             "tiny_id": int(produto.get("id", 0)),
-            "codigo": produto.get("codigo", ""),  # Mapeado para SKU no script
+            "codigo": produto.get("codigo", ""),
             "nome": produto.get("nome", ""),
             "descricao": produto.get("descricao", ""),
+            "descricao_complementar": produto.get("descricao_complementar", ""),
             "preco": float(produto.get("preco", 0) or 0),
             "preco_custo": float(produto.get("preco_custo", 0) or 0),
             "preco_promocional": float(produto.get("preco_promocional", 0) or 0),
@@ -227,6 +228,8 @@ class TinyProductsClient:
             "ncm": produto.get("ncm", ""),
             "estoque": float(produto.get("estoque", 0) or 0),
             "imagens": produto.get("imagens", []),
+            "url_produto": produto.get("url_produto", ""),
+            "link_produto": produto.get("link_produto", ""),
             "ativo": produto.get("situacao") == "A"
         }
 
