@@ -17,7 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código da aplicação
 COPY backend/src/ ./src/
 COPY backend/scripts/ ./scripts/
-COPY backend/config/ ./config/
 
 # Expor porta
 EXPOSE 8000
