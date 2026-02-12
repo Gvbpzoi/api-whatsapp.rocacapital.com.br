@@ -31,7 +31,8 @@ class TinyProductsClient:
         if self.oauth_tokens:
             import base64
             decoded = base64.b64decode(self.oauth_tokens).decode('utf-8')
-            self.access_token, self.refresh_token = decoded.split(':')
+            # Split apenas no primeiro ':' para permitir ':' no token
+            self.access_token, self.refresh_token = decoded.split(':', 1)
         else:
             self.access_token = None
             self.refresh_token = None
