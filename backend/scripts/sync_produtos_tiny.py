@@ -25,11 +25,32 @@ from loguru import logger
 from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 from src.services.tiny_products_client import get_tiny_products_client
 
 # Carregar variáveis de ambiente
 load_dotenv()
+
+# Parâmetros que psycopg2 não entende (Supabase específicos)
+DROP_QS_KEYS = {"pgbouncer", "connection_limit"}
+
+
+def sanitize_pg_dsn(database_url: str) -> str:
+    """
+    Remove query params que psycopg2 não aceita
+    (ex: pgbouncer, connection_limit do Supabase)
+    """
+    u = urlparse(database_url)
+    qs = dict(parse_qsl(u.query, keep_blank_values=True))
+
+    # Remover parâmetros incompatíveis
+    for k in list(qs.keys()):
+        if k in DROP_QS_KEYS:
+            qs.pop(k, None)
+
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
 
 
 def get_db_connection():
@@ -39,7 +60,11 @@ def get_db_connection():
     if not database_url:
         raise ValueError("DATABASE_URL ou DIRECT_URL não configurado")
 
-    return psycopg2.connect(database_url)
+    # Sanitizar URL removendo parâmetros incompatíveis
+    database_url = sanitize_pg_dsn(database_url)
+
+    # Supabase geralmente requer SSL
+    return psycopg2.connect(database_url, sslmode="require")
 
 
 async def sincronizar_produtos():
