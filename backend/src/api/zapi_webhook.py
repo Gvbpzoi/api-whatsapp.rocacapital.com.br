@@ -295,6 +295,64 @@ def _detectar_despedida(message: str) -> bool:
     return False
 
 
+def _detectar_urgencia(message: str) -> bool:
+    """
+    Detecta se o cliente precisa com urgência (hoje, agora, urgente).
+    """
+    mensagem_lower = message.lower()
+    padroes_urgencia = [
+        r"\bhoje\b",
+        r"\bagora\b",
+        r"\bjá\b",
+        r"\bja\b",
+        r"\burgente\b",
+        r"\burgência\b",
+        r"\bpra\s+hoje\b",
+        r"\bpara\s+hoje\b",
+        r"\brápido\b",
+        r"\brapido\b",
+        r"\blogo\b",
+        r"\bjá\s+já\b",
+    ]
+
+    for padrao in padroes_urgencia:
+        if re.search(padrao, mensagem_lower):
+            return True
+    return False
+
+
+def _detectar_data_futura(message: str) -> bool:
+    """
+    Detecta se o cliente mencionou uma data futura.
+    """
+    mensagem_lower = message.lower()
+    padroes_data_futura = [
+        r"\bamanhã\b",
+        r"\bamanha\b",
+        r"\bsemana\s+que\s+vem\b",
+        r"\bpróxima\s+semana\b",
+        r"\bproxima\s+semana\b",
+        r"\bmês\s+que\s+vem\b",
+        r"\bmes\s+que\s+vem\b",
+        r"\bdaqui\s+\d+\s+dia",
+        r"\bsegunda\b",
+        r"\bterça\b",
+        r"\bquarta\b",
+        r"\bquinta\b",
+        r"\bsexta\b",
+        r"\bsábado\b",
+        r"\bsabado\b",
+        r"\bdomingo\b",
+        r"\bdentro\s+de\s+\d+\s+dia",
+        r"\d{1,2}/\d{1,2}",  # Formato de data: 15/03
+    ]
+
+    for padrao in padroes_data_futura:
+        if re.search(padrao, mensagem_lower):
+            return True
+    return False
+
+
 async def _process_with_agent(phone: str, message: str, timestamp: int = None) -> str:
     """
     Processa mensagem com o agente (GOTCHA Engine).
@@ -465,6 +523,33 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 response = f"Adicionei {qtd} item(s) ao carrinho!\n\n"
                 response += f"Total de itens: {result['total_itens']}\n\n"
                 response += "Quer adicionar mais algo ou ver o carrinho?"
+            elif result["status"] == "estoque_insuficiente":
+                # Verificar se cliente mencionou urgência ou data
+                tem_urgencia = _detectar_urgencia(message)
+                tem_data_futura = _detectar_data_futura(message)
+                
+                # Verificar histórico recente para contexto da conversa
+                historico_recente = session_manager.get_conversation_history(phone, limit=3)
+                perguntou_data = False
+                for msg in historico_recente:
+                    if msg["role"] == "assistant" and "para que dia você precisa" in msg["content"].lower():
+                        perguntou_data = True
+                        break
+                
+                # Fluxo conversacional
+                if perguntou_data and tem_urgencia:
+                    # Cliente respondeu que precisa com urgência
+                    response = resp.resposta_encomenda_urgente(result["quantidade_disponivel"])
+                elif perguntou_data and tem_data_futura:
+                    # Cliente respondeu com data futura
+                    response = resp.resposta_encomenda_futura()
+                else:
+                    # Primeira vez: perguntar para quando precisa
+                    response = resp.formatar_estoque_insuficiente(
+                        result["produto"]["nome"],
+                        result["quantidade_solicitada"],
+                        result["quantidade_disponivel"]
+                    )
             else:
                 response = f"Ops! {result['message']}"
 

@@ -258,3 +258,42 @@ Cafés especiais
 Você tá procurando algo específico? Me fala o que te interessa que eu te ajudo!
 
 Ou se preferir ver tudo, dá uma olhada aqui: https://rocacapital.com.br/collections"""
+
+
+def formatar_estoque_insuficiente(produto_nome: str, quantidade_solicitada: int, quantidade_disponivel: int) -> str:
+    """
+    Formata resposta humanizada para estoque insuficiente.
+    
+    Args:
+        produto_nome: Nome do produto
+        quantidade_solicitada: Quantidade que o cliente pediu
+        quantidade_disponivel: Quantidade que tem em estoque
+    
+    Returns:
+        Resposta humanizada
+    """
+    if quantidade_disponivel == 0:
+        return f"""Olha, infelizmente hoje eu não tenho *{produto_nome}* em estoque não.
+
+Mas eu posso encomendar pra você! Para que dia você precisa?"""
+    else:
+        return f"""Olha, hoje eu só vou ter {quantidade_disponivel} {"unidade" if quantidade_disponivel == 1 else "unidades"} {"desse" if quantidade_disponivel == 1 else "desses"} *{produto_nome}*.
+
+Mas eu posso encomendar o restante pra você! Para que dia você precisa?"""
+
+
+def resposta_encomenda_futura() -> str:
+    """Resposta quando cliente pede para data futura"""
+    return """Perfeito! Deixa eu conferir com o setor de compras que dia chega a próxima remessa e já te aviso, combinado?"""
+
+
+def resposta_encomenda_urgente(quantidade_disponivel: int) -> str:
+    """Resposta quando cliente precisa com urgência"""
+    if quantidade_disponivel == 0:
+        return """Entendi! Então infelizmente hoje eu não vou ter esse produto disponível não. 
+
+Mas posso te ajudar com algum outro produto?"""
+    else:
+        return f"""Entendi! Então infelizmente hoje eu só vou ter {"essa unidade" if quantidade_disponivel == 1 else f"essas {quantidade_disponivel} unidades"} disponível mesmo.
+
+Quer levar {"ela" if quantidade_disponivel == 1 else "elas"} mesmo assim?"""

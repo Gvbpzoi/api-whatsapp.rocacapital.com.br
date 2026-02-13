@@ -205,8 +205,11 @@ class ToolsHelper:
             estoque = produto.get("quantidade_estoque", 0)
             if estoque < quantidade:
                 return {
-                    "status": "error",
-                    "message": f"Estoque insuficiente. Disponível: {estoque} unidades"
+                    "status": "estoque_insuficiente",
+                    "produto": produto,
+                    "quantidade_solicitada": quantidade,
+                    "quantidade_disponivel": estoque,
+                    "message": "Estoque insuficiente para a quantidade solicitada"
                 }
 
             # Usar preço promocional se disponível
