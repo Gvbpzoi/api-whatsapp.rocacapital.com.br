@@ -161,11 +161,12 @@ Ele cuida dessa parte com muito carinho!"""
 def formatar_produto_sem_emoji(produtos: list) -> str:
     """Formata lista de produtos sem emojis"""
     if not produtos:
-        return """Olha, com esse produto a gente não trabalha não.
+        # Bug #4 corrigido: mensagem única e coerente
+        return """Poxa, não encontrei esse produto no nosso catálogo.
 
-Poxa, não entendi direito. Consegue me mandar o link do produto que você está procurando, olhando no nosso catálogo no site?
+Dá uma olhada no nosso catálogo completo, pode ser que a gente tenha com outro nome: https://rocacapital.com.br/collections
 
-Ou então dá uma olhada no nosso catálogo completo: https://rocacapital.com.br/collections"""
+Ou me fala de outra forma o que você tá procurando que eu tento achar aqui."""
 
     if len(produtos) == 1:
         response = "Olha, encontrei esse aqui:\n\n"

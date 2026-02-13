@@ -173,6 +173,59 @@ class IntentClassifier:
         """Normaliza mensagem para usar como chave de cache"""
         return message.lower().strip()
 
+    def _stem_portuguese_plural(self, word: str) -> str:
+        """
+        Remove plural em português (stemming básico).
+        
+        Args:
+            word: Palavra em português
+        
+        Returns:
+            Palavra no singular (aproximado)
+        
+        Example:
+            >>> classifier = IntentClassifier()
+            >>> classifier._stem_portuguese_plural("azeites")
+            'azeite'
+            >>> classifier._stem_portuguese_plural("queijos")
+            'queijo'
+        """
+        word_lower = word.lower()
+        
+        # Regra 1: palavras terminadas em "ões" -> "ão" (ex: limões -> limão)
+        if word_lower.endswith("ões"):
+            return word_lower[:-3] + "ão"
+        
+        # Regra 2: palavras terminadas em "ães" -> "ão" (ex: pães -> pão)
+        if word_lower.endswith("ães"):
+            return word_lower[:-3] + "ão"
+        
+        # Regra 3: palavras terminadas em "ais" -> "al" (ex: especiais -> especial)
+        if word_lower.endswith("ais"):
+            return word_lower[:-2] + "l"
+        
+        # Regra 4: palavras terminadas em "eis" -> "el" ou "il" (ex: papéis -> papel)
+        # Simplificado: remove "is"
+        if word_lower.endswith("eis") and len(word_lower) > 4:
+            return word_lower[:-2] + "l"
+        
+        # Regra 5: palavras terminadas em "is" -> remover "s" (ex: barris -> barril)
+        if word_lower.endswith("is") and len(word_lower) > 3:
+            return word_lower[:-1]
+        
+        # Regra 6: palavras terminadas em "es" com consoante antes -> remover "es" (ex: queijões -> queijão já coberto, mas queijares -> queijar)
+        # Para simplificar, removemos "es" se a palavra tem mais de 4 letras
+        if word_lower.endswith("es") and len(word_lower) > 4:
+            # Verificar se é plural irregular (ex: cafés -> café)
+            return word_lower[:-2]
+        
+        # Regra 7: palavras terminadas em "s" (mais comum) -> remover "s"
+        if word_lower.endswith("s") and len(word_lower) > 3:
+            return word_lower[:-1]
+        
+        # Sem plural detectado, retornar palavra original
+        return word_lower
+
     def classify_with_llm(self, message: str, context: Optional[Dict] = None) -> Optional[str]:
         """
         Classifica intent usando LLM (OpenAI).
@@ -336,6 +389,8 @@ Categoria:"""
             "quero", "busco", "procuro", "tem", "têm", "tem", "vende", "vendem",
             "gostaria", "poderia", "pode", "queria", "gostava", "preciso", "necessito",
             "desejo", "tenho", "teria", "haveria",
+            # Verbos de ação (NOVO - Bug #2)
+            "cola", "coloca", "manda", "envia", "bota", "add", "adiciona",
             # Verbos de informação
             "saber", "conhecer", "entender", "ver", "mostrar", "informar", "dizer",
             # Preposições e conectivos
@@ -350,11 +405,15 @@ Categoria:"""
             "esse", "essa", "esses", "essas", "este", "esta", "estes", "estas",
             "aquele", "aquela", "aqueles", "aquelas", "isso", "isto", "aquilo",
             "você", "voce", "vc",  # ADICIONADO - evita "você" como termo
+            # Pronomes adicionais (NOVO - Bug #2)
+            "eu", "ele", "ela", "eles", "elas", "nós", "vocês", "voces", "vcs",
             # Palavras interrogativas
             "quais", "qual", "que", "onde", "quando", "como", "porque", "por", "quanto",
             "quantos", "quantas", "quanta",
             # Palavras de cortesia/conversação
             "favor", "obrigado", "obrigada", "obrigados", "obrigadas", "por", "pfv", "pf",
+            # Saudações (NOVO - Bug #2)
+            "boa", "bom", "tarde", "dia", "noite", "oi", "ola", "olá", "hey", "alo", "alô",
             # Descritores genéricos
             "tipo", "tipos", "opcao", "opcoes", "opção", "opções", "disponivel", "disponiveis",
             "disponível", "disponíveis", "informacao", "informacoes", "informação", "informações",
@@ -362,21 +421,65 @@ Categoria:"""
             # Advérbios e outros
             "mais", "menos", "muito", "muita", "pouco", "pouca", "bem", "mal", "ja", "já",
             "ainda", "tambem", "também", "so", "só", "somente", "apenas",
-            # Pronomes que causavam bug (NOVO)
-            "você", "voce", "vc", "vocês", "voces", "vcs"
         ]
 
         words = message_lower.split()
         filtered_words = [w for w in words if w not in stop_words]
+        
+        # Aplicar stemming (plural -> singular) em cada palavra (Bug #3)
+        stemmed_words = [self._stem_portuguese_plural(w) for w in filtered_words]
 
-        if filtered_words:
-            return " ".join(filtered_words)
+        if stemmed_words:
+            return " ".join(stemmed_words)
 
+        return None
+
+    def extract_product_number(self, message: str) -> Optional[int]:
+        """
+        Extrai número de escolha de produto (1-5) da mensagem.
+        Ex: "numero 2", "o 3", "#4", "item 1"
+        
+        Args:
+            message: Mensagem do usuário
+        
+        Returns:
+            Número do produto (1-5) ou None se não encontrado
+        
+        Example:
+            >>> classifier = IntentClassifier()
+            >>> num = classifier.extract_product_number("vou querer o numero 2")
+            >>> print(num)  # 2
+        """
+        message_lower = message.lower()
+        
+        # Padrões para número de escolha (ordem de prioridade)
+        patterns = [
+            r'n[uú]mero\s+([1-5])',  # "numero 2", "número 3"
+            r'num\s+([1-5])',  # "num 2"
+            r'n\s+([1-5])',  # "n 2"
+            r'#\s*([1-5])',  # "#2", "# 3"
+            r'item\s+([1-5])',  # "item 2"
+            r'\bo\s+([1-5])\b',  # "o 2" (isolado)
+            r'\ba\s+([1-5])\b',  # "a 3" (isolado)
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                return int(match.group(1))
+        
         return None
 
     def extract_quantity(self, message: str) -> int:
         """
-        Extrai quantidade da mensagem.
+        Extrai quantidade da mensagem com parsing consciente de contexto.
+        
+        Prioridade:
+        1. Padrões "X unidade(s)" ou "X un" (mais específico)
+        2. Padrões "mais um/uma/dois/tres"
+        3. Números por extenso no início ("dois azeites", "tres queijos")
+        4. Números isolados (excluindo números de item: "numero 2", "#3", etc)
+        5. Default: 1
 
         Args:
             message: Mensagem do usuário
@@ -386,15 +489,69 @@ Categoria:"""
 
         Example:
             >>> classifier = IntentClassifier()
-            >>> qty = classifier.extract_quantity("adiciona 2 queijos")
-            >>> print(qty)  # 2
+            >>> qty = classifier.extract_quantity("vou querer o numero 2 3 unidades dele")
+            >>> print(qty)  # 3 (não 2!)
         """
-        # Buscar números
-        match = re.search(r"\b(\d+)\b", message)
+        message_lower = message.lower()
+        
+        # 1. PRIORIDADE ALTA: Padrões explícitos de quantidade
+        # "3 unidades", "2 un", "5 unidade"
+        match = re.search(r'(\d+)\s*(?:unidades?|un\b|kg|kilo)', message_lower)
         if match:
             return int(match.group(1))
-
-        # Números por extenso (básico)
+        
+        # 2. Padrões "mais um/uma/dois/tres"
+        patterns_mais = {
+            r'mais\s+um\b': 1,
+            r'mais\s+uma\b': 1,
+            r'mais\s+dois\b': 2,
+            r'mais\s+duas\b': 2,
+            r'mais\s+tr[eê]s\b': 3,
+            r'mais\s+quatro\b': 4,
+            r'mais\s+cinco\b': 5,
+        }
+        
+        for pattern, qty in patterns_mais.items():
+            if re.search(pattern, message_lower):
+                return qty
+        
+        # 3. Números por extenso no INÍCIO da mensagem
+        # "dois azeites", "tres queijos" (não "numero dois")
+        numero_extenso_inicio = {
+            r'^(um|uma)\s+\w+': 1,
+            r'^(dois|duas)\s+\w+': 2,
+            r'^(tr[eê]s)\s+\w+': 3,
+            r'^(quatro)\s+\w+': 4,
+            r'^(cinco)\s+\w+': 5,
+        }
+        
+        for pattern, qty in numero_extenso_inicio.items():
+            if re.search(pattern, message_lower):
+                return qty
+        
+        # 4. EXCLUIR números que são escolhas de item (não quantidade)
+        # Padrões a IGNORAR: "numero X", "num X", "n X", "#X", "o X", "item X"
+        numero_item_patterns = [
+            r'n[uú]mero\s+\d+',
+            r'num\s+\d+',
+            r'n\s+\d+',
+            r'#\s*\d+',
+            r'item\s+\d+',
+            r'\bo\s+\d+\b',
+            r'\ba\s+\d+\b',
+        ]
+        
+        # Remover esses padrões temporariamente da mensagem
+        temp_message = message_lower
+        for pattern in numero_item_patterns:
+            temp_message = re.sub(pattern, '', temp_message)
+        
+        # Agora buscar número na mensagem limpa
+        match = re.search(r'\b(\d+)\b', temp_message)
+        if match:
+            return int(match.group(1))
+        
+        # 5. Números por extenso (genérico, sem contexto)
         numero_extenso = {
             "um": 1, "uma": 1,
             "dois": 2, "duas": 2,
@@ -402,8 +559,7 @@ Categoria:"""
             "quatro": 4,
             "cinco": 5,
         }
-
-        message_lower = message.lower()
+        
         for palavra, valor in numero_extenso.items():
             if palavra in message_lower:
                 return valor

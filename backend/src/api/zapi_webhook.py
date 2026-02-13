@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from loguru import logger
 import re
+import asyncio
 
 from ..services.zapi_client import get_zapi_client
 from ..services.session_manager import SessionManager
@@ -25,6 +26,9 @@ session_manager: Optional[SessionManager] = None
 gotcha_engine: Optional[GOTCHAEngine] = None
 intent_classifier: Optional[IntentClassifier] = None
 tools_helper: Optional[ToolsHelper] = None
+
+# Bug #5: Lock por telefone para evitar race condition no buffer
+_phone_locks: Dict[str, asyncio.Lock] = {}
 
 
 class ZAPIWebhookMessage(BaseModel):
@@ -53,63 +57,86 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
     Roda em background para não bloquear webhook.
     
     Implementa buffer de mensagens: aguarda 3 segundos para mensagens consecutivas.
+    
+    Bug #5 corrigido: Usa Lock por telefone para evitar race condition.
     """
-    try:
-        logger.info(f"📨 Processando mensagem de {phone[:8]}...")
+    # Obter ou criar lock para este telefone
+    if phone not in _phone_locks:
+        _phone_locks[phone] = asyncio.Lock()
+    
+    lock = _phone_locks[phone]
+    
+    # Apenas uma coroutine por telefone processa por vez
+    async with lock:
+        try:
+            logger.info(f"📨 Processando mensagem de {phone[:8]}...")
 
-        # Adicionar ao buffer
-        buffer_result = session_manager.add_to_buffer(phone, message)
-        
-        # Se deve aguardar mais mensagens, sair (timer vai processar depois)
-        if buffer_result["should_wait"]:
-            logger.info(f"⏳ Aguardando mais mensagens no buffer ({buffer_result['count']}/3)")
-            # Agendar processamento após 3 segundos
-            import asyncio
-            await asyncio.sleep(3.0)
+            # Adicionar ao buffer
+            buffer_result = session_manager.add_to_buffer(phone, message)
             
-            # Verificar se chegaram mais mensagens
-            current_buffer = session_manager._message_buffer.get(phone, {})
-            if len(current_buffer.get("messages", [])) > buffer_result["count"]:
-                logger.info("📬 Novas mensagens chegaram, processando tudo junto")
-                return  # Deixa o próximo ciclo processar
-        
-        # Processar mensagens do buffer (combinadas)
-        combined_message = buffer_result["combined"]
-        logger.info(f"📝 Processando {buffer_result['count']} mensagem(ns): {combined_message[:50]}...")
-        
-        # Adicionar mensagem combinada ao histórico
-        session_manager.add_to_history(phone, "user", combined_message)
-        
-        # Limpar buffer
-        session_manager.clear_buffer(phone)
+            # Se deve aguardar mais mensagens, sair (timer vai processar depois)
+            if buffer_result["should_wait"]:
+                logger.info(f"⏳ Aguardando mais mensagens no buffer ({buffer_result['count']}/3)")
+                # Agendar processamento após 3 segundos
+                await asyncio.sleep(3.0)
+                
+                # RE-FETCH buffer após sleep (Bug #5)
+                current_buffer = session_manager._message_buffer.get(phone, {})
+                messages = current_buffer.get("messages", [])
+                
+                # Se buffer foi limpo por outra task, skip
+                if not messages:
+                    logger.info("✅ Buffer já foi processado por outra task")
+                    return
+                
+                # Se chegaram mais mensagens, deixar próximo ciclo processar
+                if len(messages) > buffer_result["count"]:
+                    logger.info("📬 Novas mensagens chegaram, deixando próximo ciclo processar")
+                    return
+                
+                # Combinar mensagens do buffer atual
+                combined_message = "\n".join(messages)
+                message_count = len(messages)
+            else:
+                # Processar imediatamente
+                combined_message = buffer_result["combined"]
+                message_count = buffer_result["count"]
+            
+            logger.info(f"📝 Processando {message_count} mensagem(ns): {combined_message[:50]}...")
+            
+            # Adicionar mensagem combinada ao histórico
+            session_manager.add_to_history(phone, "user", combined_message)
+            
+            # Limpar buffer
+            session_manager.clear_buffer(phone)
 
-        # Verificar se agente deve responder
-        session = session_manager.get_session(phone)
+            # Verificar se agente deve responder
+            session = session_manager.get_session(phone)
 
-        if session.mode != "agent":
-            logger.info(f"⏸️  Agente pausado para {phone[:8]}, modo: {session.mode}")
-            return
+            if session.mode != "agent":
+                logger.info(f"⏸️  Agente pausado para {phone[:8]}, modo: {session.mode}")
+                return
 
-        # Processar com agente
-        response_text = await _process_with_agent(phone, combined_message, timestamp)
+            # Processar com agente
+            response_text = await _process_with_agent(phone, combined_message, timestamp)
 
-        if not response_text:
-            logger.warning(f"⚠️ Nenhuma resposta gerada para {phone[:8]}")
-            return
+            if not response_text:
+                logger.warning(f"⚠️ Nenhuma resposta gerada para {phone[:8]}")
+                return
 
-        # Enviar resposta via ZAPI
-        zapi = get_zapi_client()
-        result = zapi.send_text(phone, response_text)
+            # Enviar resposta via ZAPI
+            zapi = get_zapi_client()
+            result = zapi.send_text(phone, response_text)
 
-        if result["success"]:
-            # Adicionar resposta do bot ao histórico
-            session_manager.add_to_history(phone, "assistant", response_text)
-            logger.info(f"✅ Resposta enviada para {phone[:8]}")
-        else:
-            logger.error(f"❌ Falha ao enviar resposta: {result.get('error')}")
+            if result["success"]:
+                # Adicionar resposta do bot ao histórico
+                session_manager.add_to_history(phone, "assistant", response_text)
+                logger.info(f"✅ Resposta enviada para {phone[:8]}")
+            else:
+                logger.error(f"❌ Falha ao enviar resposta: {result.get('error')}")
 
-    except Exception as e:
-        logger.error(f"❌ Erro ao processar mensagem: {e}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao processar mensagem: {e}")
 
 
 def _detectar_saudacao_inicial(message: str) -> bool:
@@ -593,11 +620,9 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             produto_escolhido = None
             usar_confirmacao_proativa = False
             
-            # a) Verificar se cliente mencionou um número (1-5)
-            import re
-            match = re.search(r'\b([1-5])\b', message)
-            if match:
-                numero_produto = int(match.group(1))
+            # a) Verificar se cliente mencionou um número (1-5) usando o novo método
+            numero_produto = intent_classifier.extract_product_number(message)
+            if numero_produto:
                 produto_escolhido = session_manager.get_product_by_number(phone, numero_produto)
                 if produto_escolhido:
                     logger.info(f"✅ Cliente escolheu produto #{numero_produto}: {produto_escolhido.get('nome')}")
