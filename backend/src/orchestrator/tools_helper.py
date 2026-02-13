@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 # Importar serviço de produtos Supabase
 try:
-    from src.services.supabase_produtos import get_supabase_produtos
+    from ..services.supabase_produtos import get_supabase_produtos
     SUPABASE_PRODUTOS_AVAILABLE = True
-except ImportError:
-    logger.warning("⚠️ Módulo supabase_produtos não disponível - usando mock")
+except ImportError as e:
+    logger.warning(f"⚠️ Módulo supabase_produtos não disponível - usando mock: {e}")
     SUPABASE_PRODUTOS_AVAILABLE = False
 
 
