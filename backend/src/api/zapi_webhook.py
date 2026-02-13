@@ -438,25 +438,24 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 response = resp.RESPOSTA_PRODUTOS_DISPONIVEIS
             else:
                 # Busca específica
-                # Se começou com saudação, adiciona saudação contextual primeiro
-                if comeca_com_saudacao and not eh_so_saudacao:
-                    saudacao = resp.gerar_saudacao_contextual(hora_mensagem, tem_pedido=True, nome_cliente=nome_cliente_salvo)
-                    response = saudacao + "\n\n"
-                else:
-                    response = ""
-
                 termo = intent_classifier.extract_search_term(message)
                 logger.info(f"🔍 Termo de busca: {termo}")
 
                 result = tools_helper.buscar_produtos(termo or message, limite=5)
 
                 if result["status"] == "success":
-                    # Adiciona uma introdução mais natural
-                    if comeca_com_saudacao and not eh_so_saudacao:
-                        response += f"Vou te mandar a lista de {termo or 'produtos'}:\n\n"
+                    # Se for nova conversa, saudação completa + introdução
+                    if is_nova_conversa:
+                        response = "Oiê, tudo bem? Meu nome é Guilherme. Peraí, que eu vou te mandar os produtos que eu tenho disponíveis aqui hoje.\n\n"
+                    # Se conversa contínua mas começou com saudação, responde direto
+                    elif comeca_com_saudacao and not eh_so_saudacao:
+                        response = "Opa! "
+                    else:
+                        response = ""
+                    
                     response += resp.formatar_produto_sem_emoji(result["produtos"])
                 else:
-                    response += "Ops, tive um problema ao buscar produtos. Tente novamente."
+                    response = "Ops, tive um problema ao buscar produtos. Tente novamente."
 
         elif intent == "adicionar_carrinho":
             qtd = intent_classifier.extract_quantity(message)
