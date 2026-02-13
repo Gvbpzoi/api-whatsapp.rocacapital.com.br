@@ -301,11 +301,37 @@ Categoria:"""
         import string
         message_lower = message_lower.translate(str.maketrans('', '', string.punctuation))
 
-        # Remover palavras comuns de busca
+        # Remover palavras comuns de busca e conversação em português brasileiro
         stop_words = [
-            "quero", "busco", "procuro", "tem", "têm", "vende", "vendem",
-            "gostaria", "poderia", "pode", "me", "mostrar", "ver", "o", "a",
-            "um", "uma", "os", "as", "de"
+            # Verbos de busca/desejo
+            "quero", "busco", "procuro", "tem", "têm", "tem", "vende", "vendem",
+            "gostaria", "poderia", "pode", "queria", "gostava", "preciso", "necessito",
+            "desejo", "tenho", "teria", "haveria",
+            # Verbos de informação
+            "saber", "conhecer", "entender", "ver", "mostrar", "informar", "dizer",
+            # Preposições e conectivos
+            "sobre", "de", "da", "do", "das", "dos", "em", "na", "no", "nas", "nos",
+            "para", "pra", "com", "por", "pelo", "pela", "pelos", "pelas", "ao", "aos",
+            "a", "à", "às",
+            # Artigos
+            "o", "a", "os", "as", "um", "uma", "uns", "umas",
+            # Pronomes
+            "me", "mim", "te", "ti", "se", "si", "nos", "vos", "lhe", "lhes",
+            "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
+            "esse", "essa", "esses", "essas", "este", "esta", "estes", "estas",
+            "aquele", "aquela", "aqueles", "aquelas", "isso", "isto", "aquilo",
+            # Palavras interrogativas
+            "quais", "qual", "que", "onde", "quando", "como", "porque", "por", "quanto",
+            "quantos", "quantas", "quanta",
+            # Palavras de cortesia/conversação
+            "favor", "obrigado", "obrigada", "obrigados", "obrigadas", "por", "pfv", "pf",
+            # Descritores genéricos
+            "tipo", "tipos", "opcao", "opcoes", "opção", "opções", "disponivel", "disponiveis",
+            "disponível", "disponíveis", "informacao", "informacoes", "informação", "informações",
+            "algum", "alguma", "alguns", "algumas", "produto", "produtos", "item", "itens",
+            # Advérbios e outros
+            "mais", "menos", "muito", "muita", "pouco", "pouca", "bem", "mal", "ja", "já",
+            "ainda", "tambem", "também", "so", "só", "somente", "apenas"
         ]
 
         words = message_lower.split()

@@ -175,7 +175,7 @@ Ou então dá uma olhada no nosso catálogo completo: https://rocacapital.com.br
     for i, p in enumerate(produtos, 1):
         response += f"{i}. *{p['nome']}*\n"
         response += f"   R$ {p['preco']:.2f}\n"
-        response += f"   {int(p['estoque_atual'])} em estoque\n\n"
+        response += f"   {int(p.get('quantidade_estoque', 0))} em estoque\n\n"
 
     response += "Qual desses te interessa? Me fala o número ou o nome que eu te ajudo."
 

@@ -62,6 +62,41 @@ class ToolsHelper:
                 "preco": 18.00,
                 "quantidade_estoque": 20,
                 "categoria": "doces"
+            },
+            {
+                "id": "4",
+                "nome": "Azeite Extra Virgem Mineiro 250ml",
+                "preco": 42.00,
+                "quantidade_estoque": 12,
+                "categoria": "azeites"
+            },
+            {
+                "id": "5",
+                "nome": "Cachaça Artesanal de Alambique 700ml",
+                "preco": 85.00,
+                "quantidade_estoque": 10,
+                "categoria": "bebidas"
+            },
+            {
+                "id": "6",
+                "nome": "Café Especial Torrado em Grão 250g",
+                "preco": 28.00,
+                "quantidade_estoque": 25,
+                "categoria": "cafes"
+            },
+            {
+                "id": "7",
+                "nome": "Mel de Abelha Silvestre 500g",
+                "preco": 32.00,
+                "quantidade_estoque": 18,
+                "categoria": "doces"
+            },
+            {
+                "id": "8",
+                "nome": "Goiabada Cascão 600g",
+                "preco": 22.00,
+                "quantidade_estoque": 14,
+                "categoria": "doces"
             }
         ]
 
