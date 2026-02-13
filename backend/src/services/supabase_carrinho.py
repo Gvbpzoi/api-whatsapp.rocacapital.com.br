@@ -219,6 +219,24 @@ class SupabaseCarrinho:
             logger.error(f"❌ Erro ao remover item: {e}")
             return False
 
+    def atualizar_quantidade(self, telefone: str, produto_id: str, nova_quantidade: int) -> bool:
+        """Atualiza quantidade de um item no carrinho"""
+        try:
+            query = """
+                UPDATE carrinhos
+                SET quantidade = %s,
+                    subtotal = preco_unitario * %s,
+                    atualizado_em = NOW()
+                WHERE telefone = %s AND produto_id = %s::uuid
+            """
+            self._execute(query, (nova_quantidade, nova_quantidade, telefone, produto_id), fetch=False)
+            logger.info(f"✏️ Quantidade atualizada: {produto_id} -> {nova_quantidade}")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao atualizar quantidade: {e}")
+            return False
+
     def contar_itens(self, telefone: str) -> int:
         """Conta número de tipos de itens diferentes no carrinho"""
         try:

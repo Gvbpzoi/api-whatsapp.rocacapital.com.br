@@ -469,6 +469,124 @@ def _handle_estoque_insuficiente(ctx: HandlerContext, result: dict) -> str:
         )
 
 
+def handle_remover_item(ctx: HandlerContext) -> str:
+    """Handle removing an item from the cart"""
+    sm = ctx.session_manager
+    ic = ctx.intent_classifier
+    th = ctx.tools_helper
+
+    # Try to identify which product to remove
+    produto_alvo = None
+
+    # a) Product number mentioned
+    numero_produto = ic.extract_product_number(ctx.message)
+    if numero_produto:
+        # Number references last products shown, not cart items
+        produto_alvo = sm.get_product_by_number(ctx.phone, numero_produto)
+
+    # b) Search term in message
+    if not produto_alvo:
+        termo = ic.extract_search_term(ctx.message)
+        if termo and termo.strip():
+            # Check cart items for a match
+            carrinho = th.ver_carrinho(ctx.phone)
+            if carrinho["status"] == "success" and not carrinho.get("vazio"):
+                for item in carrinho["carrinho"]:
+                    if termo.lower() in item["nome"].lower():
+                        produto_alvo = item
+                        break
+
+    # c) Single item in cart → auto-select
+    if not produto_alvo:
+        carrinho = th.ver_carrinho(ctx.phone)
+        if carrinho["status"] == "success" and not carrinho.get("vazio"):
+            if len(carrinho["carrinho"]) == 1:
+                produto_alvo = carrinho["carrinho"][0]
+
+    if not produto_alvo:
+        carrinho = th.ver_carrinho(ctx.phone)
+        if carrinho["status"] == "success" and not carrinho.get("vazio"):
+            items_str = "\n".join(
+                f"{i+1}. {item['nome']}"
+                for i, item in enumerate(carrinho["carrinho"])
+            )
+            return f"Qual item você quer tirar do carrinho?\n\n{items_str}"
+        return "Seu carrinho já está vazio."
+
+    produto_id = str(produto_alvo.get("produto_id", produto_alvo.get("id", "")))
+    produto_nome = produto_alvo.get("nome", produto_alvo.get("produto_nome", ""))
+
+    result = th.remover_item(ctx.phone, produto_id)
+
+    if result["status"] == "success":
+        carrinho_vazio = result.get("total_itens", 0) == 0
+        return resp.formatar_item_removido(produto_nome, carrinho_vazio)
+
+    return f"Ops! {result.get('message', 'Erro ao remover item')}"
+
+
+def handle_alterar_quantidade(ctx: HandlerContext) -> str:
+    """Handle changing the quantity of an item in the cart"""
+    sm = ctx.session_manager
+    ic = ctx.intent_classifier
+    th = ctx.tools_helper
+
+    # Extract desired quantity
+    nova_qtd = ic.extract_quantity(ctx.message)
+
+    # Try to identify which product
+    produto_alvo = None
+
+    # a) Search term in message
+    termo = ic.extract_search_term(ctx.message)
+    if termo and termo.strip():
+        carrinho = th.ver_carrinho(ctx.phone)
+        if carrinho["status"] == "success" and not carrinho.get("vazio"):
+            for item in carrinho["carrinho"]:
+                if termo.lower() in item["nome"].lower():
+                    produto_alvo = item
+                    break
+
+    # b) Single item in cart → auto-select
+    if not produto_alvo:
+        carrinho = th.ver_carrinho(ctx.phone)
+        if carrinho["status"] == "success" and not carrinho.get("vazio"):
+            if len(carrinho["carrinho"]) == 1:
+                produto_alvo = carrinho["carrinho"][0]
+
+    # c) Last product shown or in context
+    if not produto_alvo:
+        produtos_contexto = sm.get_last_products_shown(ctx.phone)
+        if len(produtos_contexto) == 1:
+            # Check if this product is in cart
+            carrinho = th.ver_carrinho(ctx.phone)
+            if carrinho["status"] == "success" and not carrinho.get("vazio"):
+                for item in carrinho["carrinho"]:
+                    if str(item.get("produto_id")) == str(produtos_contexto[0].get("id")):
+                        produto_alvo = item
+                        break
+
+    if not produto_alvo:
+        carrinho = th.ver_carrinho(ctx.phone)
+        if carrinho["status"] == "success" and not carrinho.get("vazio"):
+            items_str = "\n".join(
+                f"{i+1}. {item['nome']} (Qtd: {item['quantidade']})"
+                for i, item in enumerate(carrinho["carrinho"])
+            )
+            return f"Qual item você quer alterar a quantidade?\n\n{items_str}"
+        return "Seu carrinho está vazio. Quer procurar algum produto?"
+
+    produto_id = str(produto_alvo.get("produto_id", produto_alvo.get("id", "")))
+    produto_nome = produto_alvo.get("nome", produto_alvo.get("produto_nome", ""))
+
+    result = th.alterar_quantidade(ctx.phone, produto_id, nova_qtd)
+
+    if result["status"] == "success":
+        return resp.formatar_quantidade_alterada(produto_nome, nova_qtd)
+
+    return f"Ops! {result.get('message', 'Erro ao alterar quantidade')}"
+
+
 def handle_ver_carrinho(ctx: HandlerContext) -> str:
     """Handle view cart"""
     result = ctx.tools_helper.ver_carrinho(ctx.phone)
@@ -523,6 +641,8 @@ INTENT_HANDLERS: Dict[str, Callable[[HandlerContext], str]] = {
     "embalagem_presente": handle_embalagem_presente,
     "busca_produto": handle_busca_produto,
     "adicionar_carrinho": handle_adicionar_carrinho,
+    "remover_item": handle_remover_item,
+    "alterar_quantidade": handle_alterar_quantidade,
     "ver_carrinho": handle_ver_carrinho,
     "calcular_frete": handle_calcular_frete,
     "finalizar_pedido": handle_finalizar_pedido,

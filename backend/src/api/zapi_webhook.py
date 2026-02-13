@@ -180,6 +180,13 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         if is_nova_conversa and response_evaluator:
             response_evaluator.reset_stage(phone)
 
+        # Clear stale cart on new conversation (>30min gap)
+        if is_nova_conversa and tools_helper:
+            cart = tools_helper.ver_carrinho(phone)
+            if cart.get("status") == "success" and not cart.get("vazio"):
+                logger.info(f"🗑️ Limpando carrinho antigo de {phone[:8]} (nova conversa)")
+                tools_helper.limpar_carrinho(phone)
+
         # Recuperar nome do cliente da memória
         nome_cliente_salvo = None
         preferencias = session_manager.get_customer_preferences(phone, limit=5)
@@ -219,9 +226,11 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             intent = "busca_produto"
         else:
             context = session_manager.get_context_for_classification(phone)
-            # Pass conversation stage for stage-aware classification
+            # Pass conversation stage and history for context-aware classification
             stage = response_evaluator.get_stage(phone) if response_evaluator else None
-            intent = intent_classifier.classify(message, context, stage=stage)
+            intent = intent_classifier.classify(
+                message, context, stage=stage, conversation_history=historico
+            )
             logger.info(f"🎯 Intent: {intent}")
 
         # === DISPATCH TO HANDLER ===

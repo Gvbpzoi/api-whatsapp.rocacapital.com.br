@@ -134,6 +134,24 @@ class IntentClassifier:
             r"meu\s+cep\s+([eé]|:)",
         ],
 
+        # Remover item do carrinho
+        "remover_item": [
+            r"\b(tira|remove|retira|elimina|exclui)\s+(o|a|do|da|esse|essa|isso|isto|item)",
+            r"\bn[aã]o\s+(quero|preciso)\s+mais\b",
+            r"\bcancela\s+(esse|essa|o|a|item)\b",
+            r"\b(tira|remove|retira)\s+(do|da)\s*(carrinho)\b",
+            r"\b(remove|tira|retira)\s+(o|a)\s+\w+\s+(do\s+carrinho)\b",
+        ],
+
+        # Alterar quantidade de item no carrinho
+        "alterar_quantidade": [
+            r"\bs[oó]\s+quero\s+(\d+|um|uma|dois|duas|tr[eê]s|quatro|cinco)\s+(unidade|un\b)",
+            r"\b(muda|altera|troca)\s+(pra|para|a\s+quantidade)\b",
+            r"\b(diminui|reduz|aumenta)\s+(pra|para|a\s+quantidade)\b",
+            r"\bquero\s+s[oó]\s+(\d+|um|uma|dois|duas)\b",
+            r"\bcoloca\s+s[oó]\s+(\d+|um|uma|dois|duas)\b",
+        ],
+
         # Adicionar carrinho
         "adicionar_carrinho": [
             r"\b(adiciona|coloca|quero)\s+(isso|esse|esta|este|o|a|\d+)",
@@ -226,13 +244,14 @@ class IntentClassifier:
         # Sem plural detectado, retornar palavra original
         return word_lower
 
-    def classify_with_llm(self, message: str, context: Optional[Dict] = None) -> Optional[str]:
+    def classify_with_llm(self, message: str, context: Optional[Dict] = None, conversation_history: list = None) -> Optional[str]:
         """
         Classifica intent usando LLM (OpenAI).
 
         Args:
             message: Mensagem do usuário
             context: Contexto da conversa (opcional)
+            conversation_history: Recent conversation messages (optional)
 
         Returns:
             Nome do intent ou None se falhar
@@ -240,9 +259,11 @@ class IntentClassifier:
         if not self.openai_client:
             return None
 
-        # Verificar cache
+        # Cache: skip for short ambiguous messages (<=3 words) since they
+        # depend heavily on context ("otimo", "beleza", "dois")
         cache_key = self._normalize_message(message)
-        if cache_key in self._classification_cache:
+        word_count = len(cache_key.split())
+        if word_count > 3 and cache_key in self._classification_cache:
             cached_intent = self._classification_cache[cache_key]
             logger.info(f"💾 Intent recuperado do cache: {cached_intent}")
             return cached_intent
@@ -255,7 +276,18 @@ class IntentClassifier:
                 categoria = context.get("categoria", "")
                 if assunto:
                     context_info = f"\n\nCONTEXTO: Cliente está vendo produtos de '{assunto}' (categoria: {categoria})."
-            
+
+            # Build conversation history context
+            history_info = ""
+            if conversation_history:
+                recent = conversation_history[-5:]
+                history_lines = []
+                for msg in recent:
+                    role = "Cliente" if msg.get("role") == "user" else "Atendente"
+                    content = str(msg.get("content", ""))[:150]
+                    history_lines.append(f"  {role}: {content}")
+                history_info = "\n\nHISTÓRICO RECENTE DA CONVERSA:\n" + "\n".join(history_lines)
+
             # Prompt estruturado com todos os intents
             prompt = f"""Você é um assistente que classifica mensagens de clientes da Roça Capital (loja de queijos e produtos artesanais).
 
@@ -271,15 +303,20 @@ Classifique a mensagem abaixo em UMA dessas categorias (responda APENAS com o no
 - embalagem_presente: embalagens, caixas, presentes, kits (ex: "tem embalagem de presente?")
 - busca_produto: procura por produtos específicos OU perguntas genéricas sobre produtos disponíveis (ex: "tem queijo canastra?", "quero cachaça", "pode mostrar os que você tem?", "tem mais?", "outros?")
 - adicionar_carrinho: adicionar item ao carrinho (ex: "adiciona 2 queijos", "quero mais um azeite")
+- remover_item: remover item do carrinho (ex: "tira esse", "não quero mais", "remove o azeite", "cancela esse item")
+- alterar_quantidade: mudar quantidade de item no carrinho (ex: "só quero 2 unidades", "diminui pra 1", "muda a quantidade")
 - ver_carrinho: visualizar carrinho ATUAL, perguntas sobre total/valor da compra EM ANDAMENTO (ex: "ver meu carrinho", "qual o valor total?", "quanto já gastei?")
 - calcular_frete: calcular valor do frete (ex: "quanto custa o frete?")
 - finalizar_pedido: finalizar compra/pedido (ex: "quero finalizar", "fechar pedido")
 - consultar_pedido: consultar status de pedidos JÁ FINALIZADOS/PASSADOS, com número de pedido (ex: "meus pedidos antigos", "pedido #123456", "status do pedido enviado")
 
-IMPORTANTE: 
-- "ver_carrinho" é para compra ATUAL (em andamento). 
+IMPORTANTE:
+- "ver_carrinho" é para compra ATUAL (em andamento).
 - "consultar_pedido" é para pedidos JÁ FINALIZADOS (histórico).
-- "pode mostrar os que você tem?", "tem mais?", "outros?" → busca_produto (não adicionar_carrinho){context_info}
+- "pode mostrar os que você tem?", "tem mais?", "outros?" → busca_produto (não adicionar_carrinho)
+- "não quero mais esse", "tira", "remove" → remover_item
+- "só quero 2", "diminui", "muda a quantidade" → alterar_quantidade
+- Mensagens curtas como "ótimo", "beleza", "ok" após mostrar produtos NÃO são atendimento_inicial — use o histórico para entender o contexto{context_info}{history_info}
 
 Mensagem do cliente: "{message}"
 
@@ -301,8 +338,9 @@ Categoria:"""
             # Validar se é um intent válido
             valid_intents = list(self.INTENT_PATTERNS.keys())
             if intent in valid_intents:
-                # Salvar no cache
-                self._classification_cache[cache_key] = intent
+                # Only cache longer messages (short ones are context-dependent)
+                if word_count > 3:
+                    self._classification_cache[cache_key] = intent
                 logger.info(f"🤖 Intent classificado por LLM: {intent}")
                 return intent
             else:
@@ -336,7 +374,7 @@ Categoria:"""
         logger.info("🤷 Intent não identificado (regex), usando fallback: busca_produto")
         return "busca_produto"
 
-    def classify(self, message: str, context: Optional[Dict] = None, stage=None) -> str:
+    def classify(self, message: str, context: Optional[Dict] = None, stage=None, conversation_history: list = None) -> str:
         """
         Classifica mensagem usando LLM (se disponível) com fallback para regex.
 
@@ -349,6 +387,7 @@ Categoria:"""
             message: Mensagem do usuário
             context: Contexto da conversa (opcional)
             stage: ConversationStage from response_evaluator (opcional)
+            conversation_history: Recent messages for LLM context (opcional)
 
         Returns:
             Nome do intent
@@ -361,7 +400,7 @@ Categoria:"""
 
         # Tentar LLM primeiro
         if self.openai_client:
-            llm_intent = self.classify_with_llm(message, context)
+            llm_intent = self.classify_with_llm(message, context, conversation_history)
             if llm_intent:
                 return llm_intent
             logger.warning("⚠️ LLM falhou, usando fallback regex")
@@ -448,6 +487,10 @@ Categoria:"""
             "desejo", "tenho", "teria", "haveria",
             # Verbos de ação (NOVO - Bug #2)
             "cola", "coloca", "manda", "envia", "bota", "add", "adiciona",
+            # Verbos de disponibilidade/conversa (Bug #7 - "trabalha com azeites?")
+            "trabalha", "trabalham", "funciona", "funcionam", "mexe", "mexem",
+            "faz", "fazem", "lida", "lidam", "vender", "venda",
+            "dizer", "diz", "diga", "falar", "fale", "fala",
             # Verbos de informação
             "saber", "conhecer", "entender", "ver", "mostrar", "informar", "dizer",
             # Preposições e conectivos
@@ -524,7 +567,24 @@ Categoria:"""
             match = re.search(pattern, message_lower)
             if match:
                 return int(match.group(1))
-        
+
+        # Numbers by extension: "numero dois", "numero tres", etc.
+        extenso_map = [
+            (r'n[uú]mero\s+(um|uma)\b', 1),
+            (r'n[uú]mero\s+(dois|duas)\b', 2),
+            (r'n[uú]mero\s+(tr[eê]s)\b', 3),
+            (r'n[uú]mero\s+(quatro)\b', 4),
+            (r'n[uú]mero\s+(cinco)\b', 5),
+            (r'\bo\s+(primeiro|primeira)\b', 1),
+            (r'\bo\s+(segundo|segunda)\b', 2),
+            (r'\bo\s+(terceiro|terceira)\b', 3),
+            (r'\bo\s+(quarto|quarta)\b', 4),
+            (r'\bo\s+(quinto|quinta)\b', 5),
+        ]
+        for pattern, num in extenso_map:
+            if re.search(pattern, message_lower):
+                return num
+
         return None
 
     def extract_quantity(self, message: str) -> int:
@@ -618,7 +678,7 @@ Categoria:"""
         }
         
         for palavra, valor in numero_extenso.items():
-            if palavra in message_lower:
+            if re.search(r'\b' + palavra + r'\b', message_lower):
                 return valor
 
         return 1  # Default

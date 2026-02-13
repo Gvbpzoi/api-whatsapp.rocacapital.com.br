@@ -112,6 +112,8 @@ INTENT_STAGE_MAP = {
     "atendimento_inicial": ConversationStage.GREETING,
     "busca_produto": ConversationStage.BROWSING,
     "adicionar_carrinho": ConversationStage.CARTING,
+    "remover_item": ConversationStage.REVIEWING_CART,
+    "alterar_quantidade": ConversationStage.REVIEWING_CART,
     "ver_carrinho": ConversationStage.REVIEWING_CART,
     "finalizar_pedido": ConversationStage.CHECKOUT,
     "consultar_pedido": ConversationStage.POST_PURCHASE,
