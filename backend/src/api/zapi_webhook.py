@@ -94,8 +94,8 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
                     logger.info("📬 Novas mensagens chegaram, deixando próximo ciclo processar")
                     return
                 
-                # Combinar mensagens do buffer atual
-                combined_message = "\n".join(messages)
+                # Combinar mensagens do buffer atual (extrair texto de cada dict)
+                combined_message = " ".join([msg["text"] for msg in messages])
                 message_count = len(messages)
             else:
                 # Processar imediatamente
