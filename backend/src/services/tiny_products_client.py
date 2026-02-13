@@ -137,6 +137,93 @@ class TinyProductsClient:
             logger.error(f"❌ Exceção ao obter produto {produto_id}: {e}")
             return None
 
+    async def obter_estoque(self, produto_id: str) -> Optional[float]:
+        """
+        Obtém estoque de um produto usando endpoint específico
+
+        Endpoint: /produto.obter.estoque.php
+        Retorna apenas o saldo (estoque atual) do produto
+
+        Args:
+            produto_id: ID do produto no Tiny
+
+        Returns:
+            Saldo (estoque) como float ou None se erro
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/produto.obter.estoque.php",
+                    data={
+                        "token": self.token,
+                        "id": produto_id,
+                        "formato": "JSON"
+                    }
+                )
+
+                if response.status_code != 200:
+                    logger.error(f"❌ Erro ao obter estoque produto {produto_id}: {response.status_code}")
+                    return None
+
+                data = response.json()
+
+                if data.get("retorno", {}).get("status") == "OK":
+                    produto = data.get("retorno", {}).get("produto", {})
+
+                    # Tentar campo "saldo" (mais comum) ou "estoque"
+                    saldo = produto.get("saldo") or produto.get("estoque")
+
+                    if saldo is not None:
+                        # Usar método existente para converter
+                        return self._converter_estoque({"saldo": saldo})
+                    else:
+                        logger.warning(f"⚠️ Produto {produto_id} não tem campo saldo/estoque")
+                        return 0.0
+                else:
+                    logger.error(f"❌ Erro Tiny estoque {produto_id}: {data.get('retorno', {}).get('erro')}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"❌ Exceção ao obter estoque {produto_id}: {e}")
+            return None
+
+    async def obter_produto_completo(self, produto_id: str) -> Optional[Dict]:
+        """
+        Obtém produto completo COM estoque
+
+        Faz 2 chamadas em paralelo:
+        1. produto.obter.php - Detalhes do produto
+        2. produto.obter.estoque.php - Estoque atual
+
+        Args:
+            produto_id: ID do produto no Tiny
+
+        Returns:
+            Dicionário com dados do produto + estoque atualizado
+        """
+        import asyncio
+
+        # Buscar produto e estoque em paralelo
+        produto_task = self.obter_produto(produto_id)
+        estoque_task = self.obter_estoque(produto_id)
+
+        produto, estoque = await asyncio.gather(produto_task, estoque_task)
+
+        if not produto:
+            return None
+
+        # Adicionar estoque ao produto
+        if estoque is not None:
+            produto["saldo"] = estoque
+            produto["estoque"] = estoque
+            logger.debug(f"✅ Produto {produto_id} com estoque: {estoque}")
+        else:
+            produto["saldo"] = 0
+            produto["estoque"] = 0
+            logger.warning(f"⚠️ Produto {produto_id} sem estoque disponível")
+
+        return produto
+
     async def listar_produtos(self, limite: int = 50, filtrar_site: bool = True) -> List[Dict]:
         """
         Lista produtos do Tiny ERP
@@ -199,8 +286,8 @@ class TinyProductsClient:
                         ignorados += 1
                         continue
 
-                    # Buscar detalhes completos (com observacoes)
-                    produto_completo = await self.obter_produto(produto_id)
+                    # Buscar detalhes completos (com observacoes + estoque)
+                    produto_completo = await self.obter_produto_completo(produto_id)
 
                     if not produto_completo:
                         ignorados += 1
