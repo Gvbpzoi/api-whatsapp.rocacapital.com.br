@@ -7,9 +7,24 @@ import os
 import json
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from loguru import logger
+
+
+DROP_QS_KEYS = {"pgbouncer", "connection_limit"}
+
+
+def sanitize_pg_dsn(database_url: str) -> str:
+    """Remove parâmetros incompatíveis com psycopg2"""
+    u = urlparse(database_url)
+    qs = dict(parse_qsl(u.query, keep_blank_values=True))
+    for k in list(qs.keys()):
+        if k in DROP_QS_KEYS:
+            qs.pop(k, None)
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
 
 
 class SupabaseCarrinho:
@@ -17,18 +32,23 @@ class SupabaseCarrinho:
 
     def __init__(self):
         """Inicializa conexão com Supabase"""
-        self.db_url = os.getenv("SUPABASE_DB_URL")
+        # Tentar variáveis de ambiente na ordem de prioridade:
+        # 1. DIRECT_URL (conexão direta, melhor para transações)
+        # 2. DATABASE_URL (com pgbouncer, será sanitizado)
+        self.db_url = os.getenv("DIRECT_URL") or os.getenv("DATABASE_URL")
         self.connection = None
         
         if self.db_url:
             try:
-                self.connection = psycopg2.connect(self.db_url)
+                # Sanitizar URL para remover parâmetros incompatíveis com psycopg2
+                sanitized_url = sanitize_pg_dsn(self.db_url)
+                self.connection = psycopg2.connect(sanitized_url, sslmode="require")
                 logger.info("✅ Conectado ao Supabase para carrinhos persistentes")
             except Exception as e:
                 logger.error(f"❌ Erro ao conectar Supabase: {e}")
                 self.connection = None
         else:
-            logger.warning("⚠️ SUPABASE_DB_URL não configurada, usando carrinhos em memória")
+            logger.warning("⚠️ Nenhuma variável de DB configurada (DIRECT_URL ou DATABASE_URL), usando carrinhos em memória")
 
     def _execute(self, query: str, params: tuple = None, fetch: bool = True) -> Optional[List[Dict]]:
         """Executa query no banco"""

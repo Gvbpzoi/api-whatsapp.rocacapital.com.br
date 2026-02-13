@@ -20,16 +20,24 @@ Isso cria:
 
 ## **Passo 2: Configurar Variável de Ambiente**
 
-No EasyPanel, adicione:
+No EasyPanel, adicione uma das seguintes variáveis:
 
 ```bash
-SUPABASE_DB_URL=postgresql://postgres.[SEU-PROJETO]:[SUA-SENHA]@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+# Opção 1 (Recomendada): Conexão direta
+DIRECT_URL=postgresql://postgres.[SEU-PROJETO]:[SUA-SENHA]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+
+# Opção 2: Com connection pooler
+DATABASE_URL=postgresql://postgres.[SEU-PROJETO]:[SUA-SENHA]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=10
 ```
 
 **Como obter a URL:**
 1. No Supabase, vá em **Settings** → **Database**
-2. Em **Connection String**, copie a **Transaction** (pooler mode)
+2. Em **Connection String**, você verá:
+   - **Direct Connection** → use para `DIRECT_URL`
+   - **Transaction Pooling** → use para `DATABASE_URL`
 3. Substitua `[YOUR-PASSWORD]` pela sua senha do banco
+
+**Nota:** O sistema remove automaticamente parâmetros incompatíveis (`pgbouncer`, `connection_limit`) se você usar `DATABASE_URL`.
 
 ## **Passo 3: Rebuild no EasyPanel**
 
@@ -39,7 +47,7 @@ Após adicionar a variável, faça rebuild da aplicação.
 
 ### **Carrinho Persistente (Supabase)**
 
-Quando `SUPABASE_DB_URL` está configurada:
+Quando `DIRECT_URL` ou `DATABASE_URL` está configurada:
 
 ```python
 # Cliente adiciona produto
@@ -57,7 +65,7 @@ tools_helper.ver_carrinho(phone)
 
 ### **Fallback para Memória**
 
-Se `SUPABASE_DB_URL` não estiver configurada, usa modo antigo (RAM):
+Se `DIRECT_URL` e `DATABASE_URL` não estiverem configuradas, usa modo antigo (RAM):
 
 ```python
 # Carrinhos em memória (self.carrinhos = {})
@@ -73,10 +81,10 @@ Se `SUPABASE_DB_URL` não estiver configurada, usa modo antigo (RAM):
 
 Se ver:
 ```bash
-⚠️ Supabase não disponível, usando carrinhos em memória
+⚠️ Nenhuma variável de DB configurada (DIRECT_URL ou DATABASE_URL), usando carrinhos em memória
 ```
 
-→ Verifique se `SUPABASE_DB_URL` está correta
+→ Verifique se `DIRECT_URL` ou `DATABASE_URL` está configurada no EasyPanel
 
 ## **Manutenção**
 
