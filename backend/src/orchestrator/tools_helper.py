@@ -18,6 +18,14 @@ except ImportError as e:
     logger.warning(f"⚠️ Módulo supabase_produtos não disponível - usando mock: {e}")
     SUPABASE_PRODUTOS_AVAILABLE = False
 
+# Importar serviço de carrinhos Supabase
+try:
+    from ..services.supabase_carrinho import get_supabase_carrinho
+    SUPABASE_CARRINHO_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"⚠️ Módulo supabase_carrinho não disponível - usando mock: {e}")
+    SUPABASE_CARRINHO_AVAILABLE = False
+
 
 class ToolsHelper:
     """Helper para executar tools do GOTCHA de forma simplificada"""
@@ -39,6 +47,22 @@ class ToolsHelper:
         else:
             self.produtos_service = None
             logger.info("⚠️ Usando mock de produtos")
+        
+        # Novo serviço de carrinhos persistentes
+        if SUPABASE_CARRINHO_AVAILABLE:
+            self.carrinho_service = get_supabase_carrinho()
+            if self.carrinho_service.connection:
+                logger.info("✅ Usando carrinhos persistentes (Supabase)")
+                self.use_persistent_cart = True
+            else:
+                logger.warning("⚠️ Supabase não disponível, usando carrinhos em memória")
+                self.use_persistent_cart = False
+                self.carrinhos = {}  # Fallback para memória
+        else:
+            self.carrinho_service = None
+            self.use_persistent_cart = False
+            self.carrinhos = {}  # Fallback para memória
+            logger.info("⚠️ Usando carrinhos em memória (não persistem em redeploy)")
 
         # Mock data para fallback (se Supabase não disponível)
         self.mock_produtos = [
@@ -169,7 +193,7 @@ class ToolsHelper:
 
     def adicionar_carrinho(self, telefone: str, produto_id: str, quantidade: int = 1) -> Dict[str, Any]:
         """
-        Adiciona produto ao carrinho (AGORA COM PRODUTOS REAIS).
+        Adiciona produto ao carrinho (AGORA COM PERSISTÊNCIA).
 
         Args:
             telefone: Telefone do cliente
@@ -181,10 +205,6 @@ class ToolsHelper:
         """
         try:
             logger.info(f"🛒 Adicionando produto {produto_id} (qty: {quantidade}) para {telefone}")
-
-            # Criar carrinho se não existe
-            if telefone not in self.carrinhos:
-                self.carrinhos[telefone] = []
 
             # Buscar produto no Supabase
             produto = None
@@ -203,58 +223,94 @@ class ToolsHelper:
 
             # Verificar estoque
             estoque = produto.get("quantidade_estoque", 0)
-            if estoque < quantidade:
-                return {
-                    "status": "estoque_insuficiente",
-                    "produto": produto,
-                    "quantidade_solicitada": quantidade,
-                    "quantidade_disponivel": estoque,
-                    "message": "Estoque insuficiente para a quantidade solicitada"
-                }
+            
+            # Se usar carrinho persistente, verificar quantidade já no carrinho
+            if self.use_persistent_cart:
+                items_carrinho = self.carrinho_service.obter_carrinho(telefone)
+                quantidade_no_carrinho = 0
+                for item in items_carrinho:
+                    if str(item["produto_id"]) == str(produto_id):
+                        quantidade_no_carrinho = item["quantidade"]
+                        break
+                
+                quantidade_total = quantidade_no_carrinho + quantidade
+                
+                if estoque < quantidade_total:
+                    return {
+                        "status": "estoque_insuficiente",
+                        "produto": produto,
+                        "quantidade_solicitada": quantidade_total,
+                        "quantidade_disponivel": estoque,
+                        "message": f"Você já tem {quantidade_no_carrinho} no carrinho. Não há estoque para mais {quantidade}."
+                    }
+            else:
+                # Modo memória (antigo)
+                if estoque < quantidade:
+                    return {
+                        "status": "estoque_insuficiente",
+                        "produto": produto,
+                        "quantidade_solicitada": quantidade,
+                        "quantidade_disponivel": estoque,
+                        "message": "Estoque insuficiente para a quantidade solicitada"
+                    }
 
             # Usar preço promocional se disponível
             preco = produto.get("preco_promocional") or produto.get("preco", 0)
 
-            # Verificar se produto já está no carrinho
-            item_existente = None
-            for item in self.carrinhos[telefone]:
-                if str(item["produto_id"]) == str(produto_id):
-                    item_existente = item
-                    break
-            
-            if item_existente:
-                # Produto já existe: somar quantidade
-                nova_quantidade = item_existente["quantidade"] + quantidade
+            # ADICIONAR AO CARRINHO (persistente ou memória)
+            if self.use_persistent_cart:
+                # Usar carrinho persistente (Supabase)
+                result = self.carrinho_service.adicionar_item(
+                    telefone=telefone,
+                    produto_id=str(produto.get("id")),
+                    produto_nome=produto.get("nome"),
+                    preco_unitario=float(preco),
+                    quantidade=quantidade
+                )
                 
-                # Verificar estoque para nova quantidade total
-                if estoque < nova_quantidade:
-                    return {
-                        "status": "estoque_insuficiente",
-                        "produto": produto,
-                        "quantidade_solicitada": nova_quantidade,
-                        "quantidade_disponivel": estoque,
-                        "message": f"Você já tem {item_existente['quantidade']} no carrinho. Não há estoque para mais {quantidade}."
-                    }
+                if result["status"] == "error":
+                    return result
                 
-                # Atualizar quantidade e subtotal
-                item_existente["quantidade"] = nova_quantidade
-                item_existente["subtotal"] = float(preco) * nova_quantidade
-                logger.info(f"✅ Quantidade atualizada: {item_existente['nome']} -> {nova_quantidade} un")
+                # Obter carrinho atualizado
+                carrinho = self.carrinho_service.obter_carrinho(telefone)
+                total_itens = len(carrinho)
+                
             else:
-                # Produto novo: adicionar ao carrinho
-                self.carrinhos[telefone].append({
-                    "produto_id": str(produto.get("id")),
-                    "nome": produto.get("nome"),
-                    "preco_unitario": float(preco),
-                    "quantidade": quantidade,
-                    "subtotal": float(preco) * quantidade
-                })
-                logger.info(f"✅ Produto adicionado: {produto.get('nome')}")
+                # Usar carrinho em memória (fallback)
+                if telefone not in self.carrinhos:
+                    self.carrinhos[telefone] = []
+                
+                # Verificar se produto já está no carrinho
+                item_existente = None
+                for item in self.carrinhos[telefone]:
+                    if str(item["produto_id"]) == str(produto_id):
+                        item_existente = item
+                        break
+                
+                if item_existente:
+                    # Atualizar quantidade
+                    nova_quantidade = item_existente["quantidade"] + quantidade
+                    item_existente["quantidade"] = nova_quantidade
+                    item_existente["subtotal"] = float(preco) * nova_quantidade
+                    logger.info(f"✅ Quantidade atualizada: {item_existente['nome']} -> {nova_quantidade} un")
+                else:
+                    # Adicionar novo item
+                    self.carrinhos[telefone].append({
+                        "produto_id": str(produto.get("id")),
+                        "nome": produto.get("nome"),
+                        "preco_unitario": float(preco),
+                        "quantidade": quantidade,
+                        "subtotal": float(preco) * quantidade
+                    })
+                    logger.info(f"✅ Produto adicionado: {produto.get('nome')}")
+                
+                carrinho = self.carrinhos[telefone]
+                total_itens = len(carrinho)
 
             return {
                 "status": "success",
-                "carrinho": self.carrinhos[telefone],
-                "total_itens": len(self.carrinhos[telefone])
+                "carrinho": carrinho,
+                "total_itens": total_itens
             }
 
         except Exception as e:
@@ -263,7 +319,7 @@ class ToolsHelper:
 
     def ver_carrinho(self, telefone: str) -> Dict[str, Any]:
         """
-        Visualiza carrinho do cliente.
+        Visualiza carrinho do cliente (PERSISTENTE).
 
         Args:
             telefone: Telefone do cliente
@@ -274,7 +330,14 @@ class ToolsHelper:
         try:
             logger.info(f"👀 Ver carrinho: {telefone}")
 
-            carrinho = self.carrinhos.get(telefone, [])
+            if self.use_persistent_cart:
+                # Carrinho persistente
+                carrinho = self.carrinho_service.obter_carrinho(telefone)
+                total = self.carrinho_service.calcular_total(telefone)
+            else:
+                # Carrinho em memória
+                carrinho = self.carrinhos.get(telefone, [])
+                total = sum(item["subtotal"] for item in carrinho)
 
             if not carrinho:
                 return {
@@ -283,8 +346,6 @@ class ToolsHelper:
                     "total": 0,
                     "vazio": True
                 }
-
-            total = sum(item["subtotal"] for item in carrinho)
 
             return {
                 "status": "success",
@@ -300,7 +361,7 @@ class ToolsHelper:
 
     def finalizar_pedido(self, telefone: str, metodo_pagamento: str = "pix") -> Dict[str, Any]:
         """
-        Finaliza pedido.
+        Finaliza pedido (LIMPA CARRINHO PERSISTENTE).
 
         Args:
             telefone: Telefone do cliente
@@ -312,12 +373,15 @@ class ToolsHelper:
         try:
             logger.info(f"💳 Finalizando pedido: {telefone} ({metodo_pagamento})")
 
-            carrinho = self.carrinhos.get(telefone, [])
+            if self.use_persistent_cart:
+                carrinho = self.carrinho_service.obter_carrinho(telefone)
+                total = self.carrinho_service.calcular_total(telefone)
+            else:
+                carrinho = self.carrinhos.get(telefone, [])
+                total = sum(item["subtotal"] for item in carrinho)
 
             if not carrinho:
                 return {"status": "error", "message": "Carrinho vazio"}
-
-            total = sum(item["subtotal"] for item in carrinho)
 
             # Criar pedido (mock)
             pedido = {
@@ -331,7 +395,10 @@ class ToolsHelper:
             }
 
             # Limpar carrinho
-            self.carrinhos[telefone] = []
+            if self.use_persistent_cart:
+                self.carrinho_service.limpar_carrinho(telefone)
+            else:
+                self.carrinhos[telefone] = []
 
             logger.info(f"✅ Pedido {pedido['numero']} criado")
 
