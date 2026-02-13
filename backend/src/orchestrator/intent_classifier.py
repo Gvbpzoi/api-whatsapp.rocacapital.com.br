@@ -57,8 +57,10 @@ class IntentClassifier:
             r"\b(onde|cad[eê])\s+(est[aá]|t[aá])\s+(o\s+)?(meu\s+)?pedido",
             r"\brastreamento\b",
             r"\bstatus\s+(do\s+)?pedido",
-            r"\b(pedido|compra)\s+#?\d+",
-            r"\b(meu|meus)\s+pedidos?\b",
+            r"\b(pedido|compra)\s+#?\d+",  # Pedido específico com número
+            r"\b(meu|meus)\s+pedidos?\s+(passado|anterior|antigo)",  # Pedidos passados
+            r"\baqui\s+est[aã]o\s+seus\s+pedidos\b",  # Contexto de lista de pedidos
+            r"\bpedidos?\s+(feito|realizado|antigo)",  # Pedidos já feitos
         ],
 
         # Informação sobre entrega (ANTES de informacao_loja para prioridade)
@@ -143,7 +145,12 @@ class IntentClassifier:
         "ver_carrinho": [
             r"\b(ver|mostre|mostra|exibe)\s+(o\s+)?(meu\s+)?(carrinho|pedido)",
             r"\bmeu\s+carrinho\b",
-            r"o que (eu|j[aá])\s+(tenho|pedi)",
+            r"o que (eu|j[aá]|voc[eê])\s+(tenho|pedi|coloc|adicion)",
+            r"\b(qual|quanto)\s+(o\s+|[eé]\s+o\s+)?(valor|total|pre[cç]o)",  # "qual o valor total"
+            r"\btotal\s+(da\s+)?(minha\s+)?(compra|pedido|carrinho)",  # "total da minha compra"
+            r"\b(j[aá]\s+)?gast(ei|amos|ou)",  # "já gastei", "quanto gastou"
+            r"(at[eé]|agora).*total",  # "até agora total"
+            r"(mostra|me\s+mostra).*(carrinho|no\s+carrinho)",  # "me mostra o carrinho"
         ],
 
         # Busca produto (DEFAULT - por último)
@@ -195,10 +202,12 @@ Classifique a mensagem abaixo em UMA dessas categorias (responda APENAS com o no
 - embalagem_presente: embalagens, caixas, presentes, kits (ex: "tem embalagem de presente?")
 - busca_produto: procura por produtos específicos (ex: "tem queijo canastra?", "quero cachaça")
 - adicionar_carrinho: adicionar item ao carrinho (ex: "adiciona 2 queijos")
-- ver_carrinho: visualizar carrinho (ex: "ver meu carrinho")
+- ver_carrinho: visualizar carrinho ATUAL, perguntas sobre total/valor da compra EM ANDAMENTO (ex: "ver meu carrinho", "qual o valor total?", "quanto já gastei?")
 - calcular_frete: calcular valor do frete (ex: "quanto custa o frete?")
 - finalizar_pedido: finalizar compra/pedido (ex: "quero finalizar", "fechar pedido")
-- consultar_pedido: consultar status de pedidos (ex: "meus pedidos", "status do pedido")
+- consultar_pedido: consultar status de pedidos JÁ FINALIZADOS/PASSADOS, com número de pedido (ex: "meus pedidos antigos", "pedido #123456", "status do pedido enviado")
+
+IMPORTANTE: "ver_carrinho" é para compra ATUAL (em andamento). "consultar_pedido" é para pedidos JÁ FINALIZADOS (histórico).
 
 Mensagem do cliente: "{message}"
 
