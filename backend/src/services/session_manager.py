@@ -74,6 +74,9 @@ class SessionManager:
         
         # Contexto de produtos: últimos produtos mostrados por telefone
         self._last_products_shown: Dict[str, list] = {}
+        
+        # Buffer de mensagens: aguarda mensagens em sequência rápida
+        self._message_buffer: Dict[str, dict] = {}  # {phone: {"messages": [], "timer": timestamp}}
 
     # ==================== Controle de Sessão ====================
 
@@ -193,6 +196,63 @@ class SessionManager:
         if not products or number < 1 or number > len(products):
             return None
         return products[number - 1]  # Converte para 0-based index
+    
+    # ==================== Buffer de Mensagens ====================
+    
+    def add_to_buffer(self, phone: str, message: str) -> dict:
+        """
+        Adiciona mensagem ao buffer de espera.
+        
+        Args:
+            phone: Número do telefone
+            message: Mensagem recebida
+            
+        Returns:
+            dict com buffer atual: {"messages": [...], "should_wait": bool, "combined": str}
+        """
+        now = datetime.utcnow()
+        
+        # Inicializar buffer se não existe
+        if phone not in self._message_buffer:
+            self._message_buffer[phone] = {
+                "messages": [],
+                "first_message_time": now
+            }
+        
+        buffer = self._message_buffer[phone]
+        
+        # Adicionar mensagem ao buffer
+        buffer["messages"].append({
+            "text": message,
+            "timestamp": now
+        })
+        
+        # Calcular tempo desde primeira mensagem
+        time_since_first = (now - buffer["first_message_time"]).total_seconds()
+        
+        # Decisão: aguardar mais mensagens ou processar?
+        # Aguarda se:
+        # - Tem menos de 3 mensagens E
+        # - Tempo desde primeira < 5 segundos
+        should_wait = len(buffer["messages"]) < 3 and time_since_first < 5.0
+        
+        # Combinar todas as mensagens do buffer
+        combined = " ".join([msg["text"] for msg in buffer["messages"]])
+        
+        logger.info(f"📦 Buffer {phone[:8]}: {len(buffer['messages'])} msgs, aguardar={should_wait}")
+        
+        return {
+            "messages": buffer["messages"],
+            "should_wait": should_wait,
+            "combined": combined,
+            "count": len(buffer["messages"])
+        }
+    
+    def clear_buffer(self, phone: str):
+        """Limpa buffer de mensagens."""
+        if phone in self._message_buffer:
+            del self._message_buffer[phone]
+            logger.info(f"🗑️ Buffer limpo para {phone[:8]}")
 
     # ==================== Memória Persistente (Atlas) ====================
 

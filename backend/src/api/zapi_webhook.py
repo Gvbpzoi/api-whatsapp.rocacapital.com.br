@@ -51,12 +51,37 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
     """
     Processa mensagem com o agente e envia resposta via ZAPI.
     Roda em background para não bloquear webhook.
+    
+    Implementa buffer de mensagens: aguarda 3 segundos para mensagens consecutivas.
     """
     try:
         logger.info(f"📨 Processando mensagem de {phone[:8]}...")
 
-        # Adicionar mensagem do usuário ao histórico
-        session_manager.add_to_history(phone, "user", message)
+        # Adicionar ao buffer
+        buffer_result = session_manager.add_to_buffer(phone, message)
+        
+        # Se deve aguardar mais mensagens, sair (timer vai processar depois)
+        if buffer_result["should_wait"]:
+            logger.info(f"⏳ Aguardando mais mensagens no buffer ({buffer_result['count']}/3)")
+            # Agendar processamento após 3 segundos
+            import asyncio
+            await asyncio.sleep(3.0)
+            
+            # Verificar se chegaram mais mensagens
+            current_buffer = session_manager._message_buffer.get(phone, {})
+            if len(current_buffer.get("messages", [])) > buffer_result["count"]:
+                logger.info("📬 Novas mensagens chegaram, processando tudo junto")
+                return  # Deixa o próximo ciclo processar
+        
+        # Processar mensagens do buffer (combinadas)
+        combined_message = buffer_result["combined"]
+        logger.info(f"📝 Processando {buffer_result['count']} mensagem(ns): {combined_message[:50]}...")
+        
+        # Adicionar mensagem combinada ao histórico
+        session_manager.add_to_history(phone, "user", combined_message)
+        
+        # Limpar buffer
+        session_manager.clear_buffer(phone)
 
         # Verificar se agente deve responder
         session = session_manager.get_session(phone)
@@ -66,7 +91,7 @@ async def process_and_respond(phone: str, message: str, timestamp: int = None):
             return
 
         # Processar com agente
-        response_text = await _process_with_agent(phone, message, timestamp)
+        response_text = await _process_with_agent(phone, combined_message, timestamp)
 
         if not response_text:
             logger.warning(f"⚠️ Nenhuma resposta gerada para {phone[:8]}")
@@ -609,7 +634,9 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 response = f"Ops! {result['message']}"
 
         else:
-            response = "Desculpe, não entendi. Como posso ajudar?"
+            response = """Poxa, não entendi direito o que você precisa.
+
+Pode escrever de novo? Ou me diz o que você tá procurando que eu te ajudo."""
 
         return response
 

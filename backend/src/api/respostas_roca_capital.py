@@ -161,9 +161,9 @@ Ele cuida dessa parte com muito carinho!"""
 def formatar_produto_sem_emoji(produtos: list) -> str:
     """Formata lista de produtos sem emojis"""
     if not produtos:
-        return """Puxa, não encontrei nenhum produto com esse termo não.
+        return """Olha, com esse produto a gente não trabalha não.
 
-Tenta buscar por: queijo, cachaça, doce, café...
+Poxa, não entendi direito. Consegue me mandar o link do produto que você está procurando, olhando no nosso catálogo no site?
 
 Ou então dá uma olhada no nosso catálogo completo: https://rocacapital.com.br/collections"""
 
