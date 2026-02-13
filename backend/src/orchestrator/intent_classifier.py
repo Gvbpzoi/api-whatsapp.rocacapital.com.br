@@ -336,22 +336,29 @@ Categoria:"""
         logger.info("🤷 Intent não identificado (regex), usando fallback: busca_produto")
         return "busca_produto"
 
-    def classify(self, message: str, context: Optional[Dict] = None) -> str:
+    def classify(self, message: str, context: Optional[Dict] = None, stage=None) -> str:
         """
         Classifica mensagem usando LLM (se disponível) com fallback para regex.
+
+        Stage-aware: when the customer is in BROWSING stage and sends a
+        number (1-5), short confirmation, or selection phrase, the intent
+        is overridden to adicionar_carrinho — because context tells us
+        they're selecting a product, not searching for a new one.
 
         Args:
             message: Mensagem do usuário
             context: Contexto da conversa (opcional)
+            stage: ConversationStage from response_evaluator (opcional)
 
         Returns:
             Nome do intent
-
-        Example:
-            >>> classifier = IntentClassifier()
-            >>> intent = classifier.classify("Quero queijo canastra")
-            >>> print(intent)  # "busca_produto"
         """
+        # Stage-aware override: customer just saw products and is selecting
+        stage_override = self._check_stage_override(message, stage)
+        if stage_override:
+            logger.info(f"🎯 Stage override ({stage}): {stage_override}")
+            return stage_override
+
         # Tentar LLM primeiro
         if self.openai_client:
             llm_intent = self.classify_with_llm(message, context)
@@ -361,6 +368,56 @@ Categoria:"""
 
         # Fallback: regex
         return self.classify_with_regex(message)
+
+    def _check_stage_override(self, message: str, stage) -> Optional[str]:
+        """
+        Check if conversation stage should override intent classification.
+
+        When customer is BROWSING (just saw product list) and sends:
+        - A number: "2", "o 2", "o segundo" → adicionar_carrinho
+        - A selection: "esse", "quero esse", "pode ser" → adicionar_carrinho
+        - A product-like selection: "o canastra" → adicionar_carrinho
+
+        When customer is in CARTING/REVIEWING_CART and says:
+        - "mais", "outro" → adicionar_carrinho (not busca_produto)
+        """
+        if stage is None:
+            return None
+
+        # Import here to avoid circular dependency at module level
+        stage_value = stage.value if hasattr(stage, 'value') else str(stage)
+        message_lower = message.lower().strip()
+
+        if stage_value == "browsing":
+            # Pure number selection: "2", "o 2", "o segundo", "quero o 3"
+            if re.match(r'^(o\s+)?(\d+)\.?$', message_lower):
+                return "adicionar_carrinho"
+
+            # Ordinal selection: "o primeiro", "o segundo", "o terceiro"
+            ordinals = [
+                "primeiro", "segunda", "segundo", "terceiro", "terceira",
+                "quarto", "quarta", "quinto", "quinta",
+            ]
+            if any(o in message_lower for o in ordinals):
+                return "adicionar_carrinho"
+
+            # Selection phrases
+            selection_patterns = [
+                r"^(esse|essa|este|esta)\.?$",
+                r"^quero\s+(esse|essa|o\s+\d+|a\s+\d+)",
+                r"^pode\s+ser\b",
+                r"^vou\s+(querer|levar|pegar)\b",
+                r"^(quero|leva|pega|manda)\s+(o|a|esse|essa)\b",
+            ]
+            if any(re.match(p, message_lower) for p in selection_patterns):
+                return "adicionar_carrinho"
+
+        elif stage_value in ("carting", "reviewing_cart"):
+            # "mais um", "outro" while already in cart flow
+            if re.match(r'^mais\s+(um|uma|\d+)\b', message_lower):
+                return "adicionar_carrinho"
+
+        return None
 
     def extract_search_term(self, message: str) -> Optional[str]:
         """
