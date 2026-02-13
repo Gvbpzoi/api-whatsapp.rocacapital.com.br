@@ -71,6 +71,9 @@ class SessionManager:
         self._conversation_history: Dict[str, list] = {}
         # Timeout para considerar "nova conversa" (em segundos)
         self._new_conversation_timeout = 1800  # 30 minutos
+        
+        # Contexto de produtos: últimos produtos mostrados por telefone
+        self._last_products_shown: Dict[str, list] = {}
 
     # ==================== Controle de Sessão ====================
 
@@ -154,6 +157,42 @@ class SessionManager:
         """Limpa histórico de conversa."""
         if phone in self._conversation_history:
             self._conversation_history[phone] = []
+    
+    def set_last_products_shown(self, phone: str, products: list):
+        """
+        Salva lista de produtos mostrados ao cliente.
+        
+        Args:
+            phone: Número do telefone
+            products: Lista de produtos com ID
+        """
+        self._last_products_shown[phone] = products
+        logger.info(f"💾 Salvos {len(products)} produtos no contexto de {phone[:8]}...")
+    
+    def get_last_products_shown(self, phone: str) -> list:
+        """
+        Recupera últimos produtos mostrados ao cliente.
+        
+        Returns:
+            Lista de produtos ou lista vazia
+        """
+        return self._last_products_shown.get(phone, [])
+    
+    def get_product_by_number(self, phone: str, number: int) -> Optional[dict]:
+        """
+        Recupera produto por número da lista (1-based index).
+        
+        Args:
+            phone: Número do telefone
+            number: Número do produto na lista (1, 2, 3, etc)
+            
+        Returns:
+            Produto ou None se não encontrado
+        """
+        products = self.get_last_products_shown(phone)
+        if not products or number < 1 or number > len(products):
+            return None
+        return products[number - 1]  # Converte para 0-based index
 
     # ==================== Memória Persistente (Atlas) ====================
 

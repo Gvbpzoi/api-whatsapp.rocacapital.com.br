@@ -502,6 +502,9 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 result = tools_helper.buscar_produtos(termo or message, limite=5)
 
                 if result["status"] == "success":
+                    # Salvar produtos mostrados no contexto
+                    session_manager.set_last_products_shown(phone, result["produtos"])
+                    
                     # Se for nova conversa, saudação completa + introdução
                     if is_nova_conversa:
                         response = "Oiê, tudo bem? Meu nome é Guilherme. Peraí, que eu vou te mandar os produtos que eu tenho disponíveis aqui hoje.\n\n"
@@ -517,7 +520,30 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
 
         elif intent == "adicionar_carrinho":
             qtd = intent_classifier.extract_quantity(message)
-            result = tools_helper.adicionar_carrinho(phone, "1", qtd)
+            
+            # Tentar identificar produto pelo número (ex: "3" ou "quero o número 2")
+            produto_escolhido = None
+            
+            # Verificar se cliente mencionou um número (1-5)
+            import re
+            match = re.search(r'\b([1-5])\b', message)
+            if match:
+                numero_produto = int(match.group(1))
+                produto_escolhido = session_manager.get_product_by_number(phone, numero_produto)
+                if produto_escolhido:
+                    logger.info(f"✅ Cliente escolheu produto #{numero_produto}: {produto_escolhido.get('nome')}")
+            
+            # Se não identificou produto, verificar se há apenas 1 produto no contexto
+            if not produto_escolhido:
+                produtos_contexto = session_manager.get_last_products_shown(phone)
+                if len(produtos_contexto) == 1:
+                    produto_escolhido = produtos_contexto[0]
+                    logger.info(f"✅ Usando único produto do contexto: {produto_escolhido.get('nome')}")
+            
+            # Se ainda não tem produto, usar default (ID "1")
+            produto_id = produto_escolhido.get("id") if produto_escolhido else "1"
+            
+            result = tools_helper.adicionar_carrinho(phone, str(produto_id), qtd)
 
             if result["status"] == "success":
                 response = f"Adicionei {qtd} item(s) ao carrinho!\n\n"

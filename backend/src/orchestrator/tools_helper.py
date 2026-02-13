@@ -215,16 +215,41 @@ class ToolsHelper:
             # Usar preço promocional se disponível
             preco = produto.get("preco_promocional") or produto.get("preco", 0)
 
-            # Adicionar ao carrinho
-            self.carrinhos[telefone].append({
-                "produto_id": str(produto.get("id")),
-                "nome": produto.get("nome"),
-                "preco_unitario": float(preco),
-                "quantidade": quantidade,
-                "subtotal": float(preco) * quantidade
-            })
-
-            logger.info(f"✅ Produto adicionado. Total itens: {len(self.carrinhos[telefone])}")
+            # Verificar se produto já está no carrinho
+            item_existente = None
+            for item in self.carrinhos[telefone]:
+                if str(item["produto_id"]) == str(produto_id):
+                    item_existente = item
+                    break
+            
+            if item_existente:
+                # Produto já existe: somar quantidade
+                nova_quantidade = item_existente["quantidade"] + quantidade
+                
+                # Verificar estoque para nova quantidade total
+                if estoque < nova_quantidade:
+                    return {
+                        "status": "estoque_insuficiente",
+                        "produto": produto,
+                        "quantidade_solicitada": nova_quantidade,
+                        "quantidade_disponivel": estoque,
+                        "message": f"Você já tem {item_existente['quantidade']} no carrinho. Não há estoque para mais {quantidade}."
+                    }
+                
+                # Atualizar quantidade e subtotal
+                item_existente["quantidade"] = nova_quantidade
+                item_existente["subtotal"] = float(preco) * nova_quantidade
+                logger.info(f"✅ Quantidade atualizada: {item_existente['nome']} -> {nova_quantidade} un")
+            else:
+                # Produto novo: adicionar ao carrinho
+                self.carrinhos[telefone].append({
+                    "produto_id": str(produto.get("id")),
+                    "nome": produto.get("nome"),
+                    "preco_unitario": float(preco),
+                    "quantidade": quantidade,
+                    "subtotal": float(preco) * quantidade
+                })
+                logger.info(f"✅ Produto adicionado: {produto.get('nome')}")
 
             return {
                 "status": "success",
