@@ -16,6 +16,7 @@ from ..services.session_manager import SessionManager
 from ..orchestrator.gotcha_engine import GOTCHAEngine
 from ..orchestrator.intent_classifier import IntentClassifier
 from ..orchestrator.tools_helper import ToolsHelper
+from ..orchestrator.response_evaluator import ResponseEvaluator
 from . import respostas_roca_capital as resp
 
 
@@ -26,6 +27,7 @@ session_manager: Optional[SessionManager] = None
 gotcha_engine: Optional[GOTCHAEngine] = None
 intent_classifier: Optional[IntentClassifier] = None
 tools_helper: Optional[ToolsHelper] = None
+response_evaluator: Optional[ResponseEvaluator] = None
 
 # Bug #5: Lock por telefone para evitar race condition no buffer
 _phone_locks: Dict[str, asyncio.Lock] = {}
@@ -445,6 +447,10 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         is_nova_conversa = session_manager.is_new_conversation(phone)
         logger.info(f"{'🆕 Nova conversa' if is_nova_conversa else '💬 Conversa contínua'} com {phone[:8]}")
 
+        # Reset conversation stage tracking on new conversations
+        if is_nova_conversa and response_evaluator:
+            response_evaluator.reset_stage(phone)
+
         # Recuperar nome do cliente da memória (se existe)
         nome_cliente_salvo = None
         preferencias = session_manager.get_customer_preferences(phone, limit=5)
@@ -657,9 +663,17 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                     produto_escolhido = produtos_contexto[0]
                     logger.info(f"✅ Usando único produto do contexto: {produto_escolhido.get('nome')}")
             
-            # Se ainda não tem produto, usar default (ID "1")
-            produto_id = produto_escolhido.get("id") if produto_escolhido else "1"
-            
+            # Se ainda não tem produto, pedir esclarecimento em vez de adivinhar
+            if not produto_escolhido:
+                produtos_contexto = session_manager.get_last_products_shown(phone)
+                if produtos_contexto:
+                    response = "Qual desses produtos você quer adicionar? Me fala o número ou o nome."
+                else:
+                    response = "Qual produto você quer adicionar ao carrinho? Me fala o nome que eu busco pra você."
+                return response
+
+            produto_id = produto_escolhido.get("id")
+
             # ADICIONAR AO CARRINHO
             result = tools_helper.adicionar_carrinho(phone, str(produto_id), qtd)
 
@@ -741,6 +755,31 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             response = """Poxa, não entendi direito o que você precisa.
 
 Pode escrever de novo? Ou me diz o que você tá procurando que eu te ajudo."""
+
+        # === EVALUATE RESPONSE BEFORE SENDING ===
+        if response_evaluator:
+            historico = session_manager.get_conversation_history(phone, limit=5)
+            produtos_contexto = session_manager.get_last_products_shown(phone) or None
+
+            evaluation = response_evaluator.evaluate(
+                phone=phone,
+                message=message,
+                intent=intent,
+                response=response,
+                conversation_history=historico,
+                is_new_conversation=is_nova_conversa,
+                products_in_context=produtos_contexto,
+            )
+
+            if not evaluation.passed and evaluation.adjusted_response:
+                logger.warning(
+                    f"Response adjusted by evaluator: "
+                    f"issues={evaluation.issues} score={evaluation.score:.2f}"
+                )
+                response = evaluation.adjusted_response
+            elif evaluation.adjusted_response:
+                # Passed but has a minor adjustment (e.g. stripped greeting)
+                response = evaluation.adjusted_response
 
         return response
 
