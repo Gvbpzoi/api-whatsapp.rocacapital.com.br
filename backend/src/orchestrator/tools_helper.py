@@ -332,20 +332,13 @@ class ToolsHelper:
         try:
             logger.info(f"📦 Consultando pedidos: {telefone}")
 
-            # Mock: retornar pedido de exemplo
-            pedidos_mock = [
-                {
-                    "numero": "#20260210123456",
-                    "total": 108.00,
-                    "status": "enviado",
-                    "criado_em": "2026-02-10T10:30:00"
-                }
-            ]
-
+            # TODO: Integrar com Tiny ERP ou Supabase para buscar pedidos reais
+            # Por enquanto, retornar lista vazia (sem pedidos)
+            
             return {
                 "status": "success",
-                "pedidos": pedidos_mock,
-                "total": len(pedidos_mock)
+                "pedidos": [],
+                "total": 0
             }
 
         except Exception as e:
