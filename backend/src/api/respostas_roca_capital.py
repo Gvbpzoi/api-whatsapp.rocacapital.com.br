@@ -192,9 +192,9 @@ https://rocacapital.com.br/collections"""
     response = "*Aqui está seu carrinho:*\n\n"
 
     for i, item in enumerate(carrinho_data["carrinho"], 1):
-        produto = item["produto"]
-        response += f"{i}. *{produto['nome']}*\n"
-        response += f"   Qtd: {item['quantidade']} x R$ {produto['preco']:.2f}\n"
+        # Os dados do produto estão diretamente no item, não em item["produto"]
+        response += f"{i}. *{item['nome']}*\n"
+        response += f"   Qtd: {item['quantidade']} x R$ {item['preco_unitario']:.2f}\n"
         response += f"   Subtotal: R$ {item['subtotal']:.2f}\n\n"
 
     response += f"*Total: R$ {carrinho_data['total']:.2f}*\n\n"
