@@ -159,6 +159,13 @@ class IntentClassifier:
             r"\b(queijo|cacha[cç]a|doce|caf[eé]|mel|geleia|p[aã]o|biscoito)\b",
             r"\b(produtos|cat[aá]logo|card[aá]pio|op[cç][oõ]es)\b",
             r"o que voc[eê]s? (t[eê]m|vende)",
+            # Padrões genéricos de busca
+            r"(os\s+)?que\s+(voc[eê]|voce|vc)\s+(tem|t[eê]m|vende)",
+            r"pode\s+(mostrar|mostra|listar)\s+(os\s+)?que",
+            r"(mostrar|mostra|listar)\s+(os\s+)?que\s+(voc[eê]|voce)\s+(tem|t[eê]m)",
+            r"\btem\s+mais\b",
+            r"\boutros?\b",
+            r"\boutras?\s+op[cç][oõ]es\b",
         ],
     }
 
@@ -166,12 +173,13 @@ class IntentClassifier:
         """Normaliza mensagem para usar como chave de cache"""
         return message.lower().strip()
 
-    def classify_with_llm(self, message: str) -> Optional[str]:
+    def classify_with_llm(self, message: str, context: Optional[Dict] = None) -> Optional[str]:
         """
         Classifica intent usando LLM (OpenAI).
 
         Args:
             message: Mensagem do usuário
+            context: Contexto da conversa (opcional)
 
         Returns:
             Nome do intent ou None se falhar
@@ -187,6 +195,14 @@ class IntentClassifier:
             return cached_intent
 
         try:
+            # Adicionar contexto ao prompt se disponível
+            context_info = ""
+            if context:
+                assunto = context.get("assunto", "")
+                categoria = context.get("categoria", "")
+                if assunto:
+                    context_info = f"\n\nCONTEXTO: Cliente está vendo produtos de '{assunto}' (categoria: {categoria})."
+            
             # Prompt estruturado com todos os intents
             prompt = f"""Você é um assistente que classifica mensagens de clientes da Roça Capital (loja de queijos e produtos artesanais).
 
@@ -200,14 +216,17 @@ Classifique a mensagem abaixo em UMA dessas categorias (responda APENAS com o no
 - rastreamento_pedido: código de rastreio, acompanhamento (ex: "onde está meu pedido?", "rastreamento")
 - armazenamento_queijo: como guardar/conservar queijo (ex: "como guardar o queijo?")
 - embalagem_presente: embalagens, caixas, presentes, kits (ex: "tem embalagem de presente?")
-- busca_produto: procura por produtos específicos (ex: "tem queijo canastra?", "quero cachaça")
-- adicionar_carrinho: adicionar item ao carrinho (ex: "adiciona 2 queijos")
+- busca_produto: procura por produtos específicos OU perguntas genéricas sobre produtos disponíveis (ex: "tem queijo canastra?", "quero cachaça", "pode mostrar os que você tem?", "tem mais?", "outros?")
+- adicionar_carrinho: adicionar item ao carrinho (ex: "adiciona 2 queijos", "quero mais um azeite")
 - ver_carrinho: visualizar carrinho ATUAL, perguntas sobre total/valor da compra EM ANDAMENTO (ex: "ver meu carrinho", "qual o valor total?", "quanto já gastei?")
 - calcular_frete: calcular valor do frete (ex: "quanto custa o frete?")
 - finalizar_pedido: finalizar compra/pedido (ex: "quero finalizar", "fechar pedido")
 - consultar_pedido: consultar status de pedidos JÁ FINALIZADOS/PASSADOS, com número de pedido (ex: "meus pedidos antigos", "pedido #123456", "status do pedido enviado")
 
-IMPORTANTE: "ver_carrinho" é para compra ATUAL (em andamento). "consultar_pedido" é para pedidos JÁ FINALIZADOS (histórico).
+IMPORTANTE: 
+- "ver_carrinho" é para compra ATUAL (em andamento). 
+- "consultar_pedido" é para pedidos JÁ FINALIZADOS (histórico).
+- "pode mostrar os que você tem?", "tem mais?", "outros?" → busca_produto (não adicionar_carrinho){context_info}
 
 Mensagem do cliente: "{message}"
 
@@ -264,12 +283,13 @@ Categoria:"""
         logger.info("🤷 Intent não identificado (regex), usando fallback: busca_produto")
         return "busca_produto"
 
-    def classify(self, message: str) -> str:
+    def classify(self, message: str, context: Optional[Dict] = None) -> str:
         """
         Classifica mensagem usando LLM (se disponível) com fallback para regex.
 
         Args:
             message: Mensagem do usuário
+            context: Contexto da conversa (opcional)
 
         Returns:
             Nome do intent
@@ -281,7 +301,7 @@ Categoria:"""
         """
         # Tentar LLM primeiro
         if self.openai_client:
-            llm_intent = self.classify_with_llm(message)
+            llm_intent = self.classify_with_llm(message, context)
             if llm_intent:
                 return llm_intent
             logger.warning("⚠️ LLM falhou, usando fallback regex")
@@ -329,6 +349,7 @@ Categoria:"""
             "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
             "esse", "essa", "esses", "essas", "este", "esta", "estes", "estas",
             "aquele", "aquela", "aqueles", "aquelas", "isso", "isto", "aquilo",
+            "você", "voce", "vc",  # ADICIONADO - evita "você" como termo
             # Palavras interrogativas
             "quais", "qual", "que", "onde", "quando", "como", "porque", "por", "quanto",
             "quantos", "quantas", "quanta",
@@ -340,7 +361,9 @@ Categoria:"""
             "algum", "alguma", "alguns", "algumas", "produto", "produtos", "item", "itens",
             # Advérbios e outros
             "mais", "menos", "muito", "muita", "pouco", "pouca", "bem", "mal", "ja", "já",
-            "ainda", "tambem", "também", "so", "só", "somente", "apenas"
+            "ainda", "tambem", "também", "so", "só", "somente", "apenas",
+            # Pronomes que causavam bug (NOVO)
+            "você", "voce", "vc", "vocês", "voces", "vcs"
         ]
 
         words = message_lower.split()

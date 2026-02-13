@@ -310,11 +310,43 @@ class ToolsHelper:
             return {
                 "status": "success",
                 "carrinho": carrinho,
-                "total_itens": total_itens
+                "total_itens": total_itens,
+                "quantidade_total": sum(item.get("quantidade", 0) for item in carrinho)
             }
 
         except Exception as e:
             logger.error(f"❌ Erro ao adicionar: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def adicionar_por_termo(self, telefone: str, termo: str, quantidade: int = 1) -> Dict[str, Any]:
+        """
+        Busca produto por termo e adiciona ao carrinho.
+        
+        Args:
+            telefone: Telefone do cliente
+            termo: Termo de busca
+            quantidade: Quantidade
+            
+        Returns:
+            Dict com resultado
+        """
+        try:
+            logger.info(f"🔍➕ Buscando e adicionando: '{termo}' (qty: {quantidade})")
+            
+            # Buscar produto
+            result = self.buscar_produtos(termo, limite=1)
+            
+            if result["status"] != "success" or not result["produtos"]:
+                return {"status": "error", "message": "Produto não encontrado"}
+            
+            produto = result["produtos"][0]
+            produto_id = str(produto.get("id"))
+            
+            # Adicionar ao carrinho
+            return self.adicionar_carrinho(telefone, produto_id, quantidade)
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao adicionar por termo: {e}")
             return {"status": "error", "message": str(e)}
 
     def ver_carrinho(self, telefone: str) -> Dict[str, Any]:
@@ -352,6 +384,7 @@ class ToolsHelper:
                 "carrinho": carrinho,
                 "total": total,
                 "total_itens": len(carrinho),
+                "quantidade_total": sum(item.get("quantidade", 0) for item in carrinho),
                 "vazio": False
             }
 

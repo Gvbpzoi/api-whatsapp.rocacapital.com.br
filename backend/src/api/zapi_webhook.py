@@ -269,7 +269,7 @@ def _extrair_nome_cliente(message: str, historico: list) -> Optional[str]:
 def _detectar_pergunta_generica_produtos(message: str) -> bool:
     """
     Detecta se o cliente está perguntando de forma genérica sobre produtos
-    (sem especificar um produto), ex: "quais queijos você tem?", "o que você tem?"
+    (sem especificar um produto), ex: "quais queijos você tem?", "o que você tem?", "pode mostrar os que você tem?"
     """
     mensagem_lower = message.lower()
     padroes_genericos = [
@@ -286,12 +286,33 @@ def _detectar_pergunta_generica_produtos(message: str) -> bool:
         r"variedades? de queijo",
         r"opcoes de queijo",
         r"opções de queijo",
+        # NOVOS padrões (do plano)
+        r"(pode\s+)?(mostrar|mostra|listar)\s+(os\s+)?que",
+        r"os\s+que\s+(você|voce|vc)\s+(tem|têm)",
+        r"\btem\s+mais\b",
+        r"\boutros?\b",
+        r"\boutras?\s+op[cç][oõ]es\b",
     ]
 
     for padrao in padroes_genericos:
         if re.search(padrao, mensagem_lower):
             return True
     return False
+
+
+def _detectar_referencia_a_escolha(message: str) -> bool:
+    """
+    Detecta se mensagem referencia produto escolhido antes.
+    Ex: "mais um azeite", "outro queijo", "aquele azeite", "mesmo queijo"
+    """
+    mensagem_lower = message.lower()
+    patterns = [
+        r"\bmais\s+(um|uma|dois|duas|\d+)\s+\w+",  # "mais um azeite"
+        r"\boutr[oa]\s+\w+",  # "outro queijo"
+        r"\baquele\s+\w+",  # "aquele azeite"
+        r"\bmesm[oa]\s+\w+",  # "mesmo queijo"
+    ]
+    return any(re.search(p, mensagem_lower) for p in patterns)
 
 
 def _detectar_despedida(message: str) -> bool:
@@ -441,9 +462,15 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             logger.info("👋 Detectada despedida")
             return resp.RESPOSTA_DESPEDIDA
 
-        # Classificar intent
-        intent = intent_classifier.classify(message)
-        logger.info(f"🎯 Intent classificado: {intent}")
+        # PRÉ-CHECAGEM: Detectar pergunta genérica sobre produtos (antes da classificação)
+        if _detectar_pergunta_generica_produtos(message):
+            logger.info("🔍 Pré-checagem: pergunta genérica sobre produtos → busca_produto")
+            intent = "busca_produto"
+        else:
+            # Classificar intent COM CONTEXTO
+            context = session_manager.get_context_for_classification(phone)
+            intent = intent_classifier.classify(message, context)
+            logger.info(f"🎯 Intent classificado: {intent}")
 
         # Detectar se começa com saudação
         comeca_com_saudacao = _detectar_saudacao_inicial(message)
@@ -520,15 +547,31 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 logger.info("📦 Detectada pergunta genérica sobre produtos")
                 response = resp.RESPOSTA_PRODUTOS_DISPONIVEIS
             else:
-                # Busca específica
+                # Enriquecer termo com contexto se necessário
                 termo = intent_classifier.extract_search_term(message)
+                
+                # Se não extraiu termo mas tem contexto, usar o contexto
+                if not termo or len(termo.strip()) == 0:
+                    context = session_manager.get_conversation_subject(phone)
+                    if context and context.get("termo"):
+                        termo = context["termo"]
+                        logger.info(f"🔄 Usando termo do contexto: {termo}")
+                
                 logger.info(f"🔍 Termo de busca: {termo}")
 
                 result = tools_helper.buscar_produtos(termo or message, limite=5)
 
                 if result["status"] == "success":
-                    # Salvar produtos mostrados no contexto
+                    # Salvar produtos mostrados no contexto (legado)
                     session_manager.set_last_products_shown(phone, result["produtos"])
+                    
+                    # NOVO: Salvar assunto da conversa (contexto conversacional)
+                    session_manager.set_conversation_subject(
+                        phone=phone,
+                        termo=termo or message,
+                        produtos_ids=[p["id"] for p in result["produtos"]],
+                        produtos=result["produtos"]
+                    )
                     
                     # Se for nova conversa, saudação completa + introdução
                     if is_nova_conversa:
@@ -546,10 +589,11 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
         elif intent == "adicionar_carrinho":
             qtd = intent_classifier.extract_quantity(message)
             
-            # Tentar identificar produto pelo número (ex: "3" ou "quero o número 2")
+            # NOVO FLUXO: Resolver produto com memória de escolhas
             produto_escolhido = None
+            usar_confirmacao_proativa = False
             
-            # Verificar se cliente mencionou um número (1-5)
+            # a) Verificar se cliente mencionou um número (1-5)
             import re
             match = re.search(r'\b([1-5])\b', message)
             if match:
@@ -558,7 +602,30 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
                 if produto_escolhido:
                     logger.info(f"✅ Cliente escolheu produto #{numero_produto}: {produto_escolhido.get('nome')}")
             
-            # Se não identificou produto, verificar se há apenas 1 produto no contexto
+            # b) Termo específico na mensagem (ex: "dois azeites", "3 queijos canastra")
+            # MAS ANTES: verificar se é referência a escolha anterior
+            if not produto_escolhido:
+                termo = intent_classifier.extract_search_term(message)
+                if termo and len(termo.split()) >= 1:  # tem palavra significativa
+                    # Verificar se é referência a escolha anterior (ex: "mais um azeite")
+                    if _detectar_referencia_a_escolha(message):
+                        logger.info(f"🔄 Detectada referência a escolha anterior: '{termo}'")
+                        last_choice = session_manager.get_last_choice_by_term(phone, termo)
+                        if last_choice:
+                            produto_escolhido = last_choice["produto"]
+                            usar_confirmacao_proativa = True
+                            logger.info(f"💾 Usando produto do histórico: {produto_escolhido.get('nome')}")
+                    
+                    # Se não achou no histórico, buscar novo produto
+                    if not produto_escolhido:
+                        result_busca = tools_helper.buscar_produtos(termo, limite=1)
+                        if result_busca["produtos"]:
+                            produto_escolhido = result_busca["produtos"][0]
+                            logger.info(f"✅ Produto encontrado por busca: {produto_escolhido.get('nome')}")
+            
+            # c) (removido - agora está incluído em b)
+            
+            # d) Se ainda não tem produto, verificar se há apenas 1 produto no contexto
             if not produto_escolhido:
                 produtos_contexto = session_manager.get_last_products_shown(phone)
                 if len(produtos_contexto) == 1:
@@ -568,11 +635,23 @@ async def _process_with_agent(phone: str, message: str, timestamp: int = None) -
             # Se ainda não tem produto, usar default (ID "1")
             produto_id = produto_escolhido.get("id") if produto_escolhido else "1"
             
+            # ADICIONAR AO CARRINHO
             result = tools_helper.adicionar_carrinho(phone, str(produto_id), qtd)
 
             if result["status"] == "success":
-                response = f"Adicionei {qtd} item(s) ao carrinho!\n\n"
-                response += f"Total de itens: {result['total_itens']}\n\n"
+                # NOVO: Salvar escolha no histórico
+                if produto_escolhido:
+                    session_manager.save_product_choice(phone, produto_escolhido, qtd)
+                
+                # Resposta com confirmação proativa se usou histórico
+                if usar_confirmacao_proativa and produto_escolhido:
+                    response = f"Adicionei {qtd}x {produto_escolhido['nome']}, aquele que você escolheu antes.\n\n"
+                else:
+                    response = f"Adicionei {qtd} item(s) ao carrinho!\n\n"
+                
+                # Corrigir total (agora mostra quantidade total, não número de linhas)
+                quantidade_total = result.get('quantidade_total', sum(item['quantidade'] for item in result.get('carrinho', [])))
+                response += f"Total: {quantidade_total} produto(s)\n\n"
                 response += "Quer adicionar mais algo ou ver o carrinho?"
             elif result["status"] == "estoque_insuficiente":
                 # Verificar se cliente mencionou urgência ou data

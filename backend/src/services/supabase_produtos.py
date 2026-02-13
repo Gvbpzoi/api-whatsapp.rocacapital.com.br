@@ -102,21 +102,36 @@ class SupabaseProdutos:
                 query += " AND LOWER(categoria) = LOWER(%s)"
                 params.append(categoria)
 
-            # Filtro: termo de busca (nome, descrição, categoria)
+            # Filtro: termo de busca (nome, descrição, categoria, tags)
             # Usa UNACCENT para ignorar acentos: "cafes" encontra "Café" ✅
+            # Ordenação por relevância: nome > categoria > tags > descricao
             if termo:
                 query += """
                     AND (
                         unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
-                        OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
                         OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
+                        OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                        OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
                     )
                 """
                 termo_like = f"%{termo}%"
-                params.extend([termo_like, termo_like, termo_like])
+                params.extend([termo_like, termo_like, termo_like, termo_like])
 
-            # Ordenar por nome
-            query += " ORDER BY nome ASC LIMIT %s"
+            # Ordenar por relevância: prioriza match em nome, depois categoria, depois tags, depois descrição
+            query += """
+                ORDER BY
+                    CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                    CASE WHEN unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                    CASE WHEN unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                    nome ASC
+                LIMIT %s
+            """
+            if termo:
+                termo_like = f"%{termo}%"
+                params.extend([termo_like, termo_like, termo_like])
+            else:
+                # Se não tem termo, usar valores neutros para ordenação
+                params.extend(["%", "%", "%"])
             params.append(limite)
 
             cursor.execute(query, params)

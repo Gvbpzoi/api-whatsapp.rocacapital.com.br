@@ -75,6 +75,17 @@ class SessionManager:
         # Contexto de produtos: últimos produtos mostrados por telefone
         self._last_products_shown: Dict[str, list] = {}
         
+        # Contexto de assunto da conversa (para continuidade)
+        # {phone: {"termo": "azeite", "timestamp": datetime, "produtos_ids": [...], "produtos": [...], "categoria": "azeites"}}
+        self._conversation_subject: Dict[str, dict] = {}
+        
+        # Histórico de escolhas por categoria (NOVO - memória de produtos adicionados)
+        # {phone: {
+        #    "azeites": {"produto": {...}, "timestamp": datetime, "quantidade_total": 3},
+        #    "queijos": {"produto": {...}, "timestamp": datetime, "quantidade_total": 2}
+        # }}
+        self._product_choices_history: Dict[str, dict] = {}
+        
         # Buffer de mensagens: aguarda mensagens em sequência rápida
         self._message_buffer: Dict[str, dict] = {}  # {phone: {"messages": [], "timer": timestamp}}
 
@@ -253,6 +264,496 @@ class SessionManager:
         if phone in self._message_buffer:
             del self._message_buffer[phone]
             logger.info(f"🗑️ Buffer limpo para {phone[:8]}")
+    
+    # ==================== Contexto Conversacional ====================
+    
+    def set_conversation_subject(self, phone: str, termo: str, produtos_ids: list, produtos: list):
+        """
+        Salva assunto atual da conversa (o que o cliente está vendo/buscando).
+        
+        Args:
+            phone: Número do telefone
+            termo: Termo de busca usado
+            produtos_ids: IDs dos produtos mostrados
+            produtos: Lista completa de produtos mostrados
+        """
+        categoria = self._infer_category_from_term(termo) if termo else None
+        
+        self._conversation_subject[phone] = {
+            "termo": termo,
+            "timestamp": datetime.utcnow(),
+            "produtos_ids": produtos_ids,
+            "produtos": produtos,
+            "categoria": categoria
+        }
+        
+        logger.info(f"💭 Assunto salvo para {phone[:8]}: '{termo}' (categoria: {categoria})")
+    
+    def get_conversation_subject(self, phone: str, max_age_seconds: int = 600) -> Optional[dict]:
+        """
+        Recupera assunto atual da conversa (se ainda válido).
+        
+        Args:
+            phone: Número do telefone
+            max_age_seconds: Idade máxima em segundos (padrão: 10min)
+            
+        Returns:
+            Dict com contexto ou None se expirado
+        """
+        if phone not in self._conversation_subject:
+            return None
+        
+        subject = self._conversation_subject[phone]
+        age = (datetime.utcnow() - subject["timestamp"]).total_seconds()
+        
+        if age > max_age_seconds:
+            logger.info(f"⏰ Contexto expirado para {phone[:8]} (idade: {int(age)}s)")
+            del self._conversation_subject[phone]
+            return None
+        
+        return subject
+    
+    def get_context_for_classification(self, phone: str) -> Optional[Dict]:
+        """
+        Retorna contexto resumido para auxiliar classificação de intent.
+        
+        Args:
+            phone: Número do telefone
+            
+        Returns:
+            Dict com contexto ou None
+        """
+        subject = self.get_conversation_subject(phone)
+        
+        if not subject:
+            return None
+        
+        return {
+            "assunto": subject.get("termo"),
+            "categoria": subject.get("categoria"),
+            "produtos_mostrados": len(subject.get("produtos", [])),
+            "idade_segundos": (datetime.utcnow() - subject["timestamp"]).total_seconds()
+        }
+    
+    # ==================== Histórico de Escolhas por Categoria ====================
+    
+    def save_product_choice(self, phone: str, produto: dict, quantidade: int = 1):
+        """
+        Salva produto adicionado ao carrinho no histórico de escolhas.
+        Permite referências futuras como "coloca mais um azeite".
+        
+        Args:
+            phone: Número do telefone
+            produto: Dados do produto
+            quantidade: Quantidade adicionada
+        """
+        if phone not in self._product_choices_history:
+            self._product_choices_history[phone] = {}
+        
+        # Inferir categoria do produto
+        categoria = self._infer_category_from_product(produto)
+        
+        if not categoria:
+            logger.warning(f"⚠️ Não foi possível inferir categoria de: {produto.get('nome')}")
+            return
+        
+        # Atualizar ou criar entrada da categoria
+        if categoria in self._product_choices_history[phone]:
+            # Atualizar quantidade total se for o mesmo produto
+            choice = self._product_choices_history[phone][categoria]
+            if choice["produto"].get("id") == produto.get("id"):
+                choice["quantidade_total"] += quantidade
+                choice["timestamp"] = datetime.utcnow()
+                logger.info(f"📝 Escolha atualizada ({categoria}): {quantidade} → total: {choice['quantidade_total']}")
+            else:
+                # Produto diferente da mesma categoria: substituir
+                self._product_choices_history[phone][categoria] = {
+                    "produto": produto,
+                    "timestamp": datetime.utcnow(),
+                    "quantidade_total": quantidade
+                }
+                logger.info(f"📝 Nova escolha ({categoria}): {produto.get('nome')}")
+        else:
+            # Nova categoria
+            self._product_choices_history[phone][categoria] = {
+                "produto": produto,
+                "timestamp": datetime.utcnow(),
+                "quantidade_total": quantidade
+            }
+            logger.info(f"📝 Primeira escolha ({categoria}): {produto.get('nome')}")
+    
+    def get_last_choice_by_category(self, phone: str, categoria: str, max_age_seconds: int = 1800) -> Optional[dict]:
+        """
+        Recupera último produto escolhido de uma categoria.
+        
+        Args:
+            phone: Número do telefone
+            categoria: Categoria (ex: "azeites", "queijos")
+            max_age_seconds: Idade máxima (padrão: 30min)
+            
+        Returns:
+            Dict com escolha ou None
+        """
+        if phone not in self._product_choices_history:
+            return None
+        
+        if categoria not in self._product_choices_history[phone]:
+            return None
+        
+        choice = self._product_choices_history[phone][categoria]
+        age = (datetime.utcnow() - choice["timestamp"]).total_seconds()
+        
+        if age > max_age_seconds:
+            logger.info(f"⏰ Escolha antiga ({categoria}): {int(age)}s")
+            return None
+        
+        return choice
+    
+    def get_last_choice_by_term(self, phone: str, termo: str, max_age_seconds: int = 1800) -> Optional[dict]:
+        """
+        Busca última escolha por termo (infere categoria do termo).
+        
+        Args:
+            phone: Número do telefone
+            termo: Termo de busca (ex: "azeite", "queijo")
+            max_age_seconds: Idade máxima (padrão: 30min)
+            
+        Returns:
+            Dict com escolha ou None
+        """
+        categoria = self._infer_category_from_term(termo)
+        
+        if not categoria:
+            return None
+        
+        return self.get_last_choice_by_category(phone, categoria, max_age_seconds)
+    
+    def _infer_category_from_product(self, produto: dict) -> Optional[str]:
+        """
+        Infere categoria do produto a partir dos dados.
+        
+        Args:
+            produto: Dados do produto
+            
+        Returns:
+            Nome da categoria ou None
+        """
+        # Tentar usar campo categoria direto
+        if "categoria" in produto and produto["categoria"]:
+            return produto["categoria"].lower().strip()
+        
+        # Fallback: extrair do nome
+        nome = produto.get("nome", "").lower()
+        
+        categorias_map = {
+            "queijo": "queijos",
+            "azeite": "azeites",
+            "cachaça": "cachacas",
+            "doce": "doces",
+            "mel": "doces",
+            "café": "cafes",
+            "vinho": "vinhos",
+            "geleia": "doces",
+            "biscoito": "biscoitos",
+            "pão": "paes"
+        }
+        
+        for termo, categoria in categorias_map.items():
+            if termo in nome:
+                return categoria
+        
+        return None
+    
+    def _infer_category_from_term(self, termo: str) -> Optional[str]:
+        """
+        Infere categoria a partir do termo de busca.
+        
+        Args:
+            termo: Termo de busca
+            
+        Returns:
+            Nome da categoria (plural) ou None
+        """
+        if not termo:
+            return None
+        
+        termo_lower = termo.lower().strip()
+        
+        # Mapeamento de termos para categorias
+        categorias_map = {
+            "queijo": "queijos",
+            "queijos": "queijos",
+            "azeite": "azeites",
+            "azeites": "azeites",
+            "cachaça": "cachacas",
+            "cachacas": "cachacas",
+            "doce": "doces",
+            "doces": "doces",
+            "mel": "doces",
+            "café": "cafes",
+            "cafes": "cafes",
+            "vinho": "vinhos",
+            "vinhos": "vinhos",
+            "geleia": "doces",
+            "geleias": "doces",
+            "biscoito": "biscoitos",
+            "biscoitos": "biscoitos",
+            "pão": "paes",
+            "paes": "paes"
+        }
+        
+        # Buscar termo exato
+        if termo_lower in categorias_map:
+            return categorias_map[termo_lower]
+        
+        # Buscar termo contido
+        for termo_key, categoria in categorias_map.items():
+            if termo_key in termo_lower:
+                return categoria
+        
+        return None
+    
+    # ==================== Contexto Conversacional ====================
+    
+    def set_conversation_subject(
+        self,
+        phone: str,
+        termo: str,
+        produtos_ids: List[str],
+        produtos: List[dict],
+        categoria: Optional[str] = None
+    ):
+        """
+        Salva assunto da conversa atual para manter contexto.
+        
+        Args:
+            phone: Telefone do cliente
+            termo: Termo de busca usado
+            produtos_ids: IDs dos produtos mostrados
+            produtos: Lista completa de produtos
+            categoria: Categoria inferida (opcional)
+        """
+        self._conversation_subject[phone] = {
+            "termo": termo,
+            "timestamp": datetime.utcnow(),
+            "produtos_ids": produtos_ids,
+            "produtos": produtos,
+            "categoria": categoria or self._infer_category_from_term(termo)
+        }
+        logger.info(f"💭 Assunto salvo para {phone[:8]}: {termo} (cat: {categoria or 'auto'})")
+    
+    def get_conversation_subject(self, phone: str, max_age_seconds: int = 600) -> Optional[dict]:
+        """
+        Recupera assunto da conversa se ainda válido (timeout 10min por padrão).
+        
+        Args:
+            phone: Telefone do cliente
+            max_age_seconds: Idade máxima do contexto em segundos
+            
+        Returns:
+            Dict com contexto ou None se expirado
+        """
+        if phone not in self._conversation_subject:
+            return None
+        
+        context = self._conversation_subject[phone]
+        age = (datetime.utcnow() - context["timestamp"]).total_seconds()
+        
+        if age > max_age_seconds:
+            logger.info(f"⏰ Contexto de {phone[:8]} expirado ({age:.0f}s)")
+            return None
+        
+        return context
+    
+    def get_context_for_classification(self, phone: str) -> Optional[Dict]:
+        """
+        Retorna contexto resumido para o classificador de intent.
+        
+        Args:
+            phone: Telefone do cliente
+            
+        Returns:
+            Dict com contexto resumido ou None
+        """
+        subject = self.get_conversation_subject(phone)
+        if not subject:
+            return None
+        
+        return {
+            "assunto": subject["termo"],
+            "categoria": subject["categoria"],
+            "produtos_mostrados": len(subject["produtos_ids"])
+        }
+    
+    # ==================== Memória de Escolhas por Categoria ====================
+    
+    def _infer_category_from_product(self, produto: dict) -> str:
+        """
+        Infere categoria do produto.
+        
+        Args:
+            produto: Dados do produto
+            
+        Returns:
+            Categoria normalizada (plural)
+        """
+        # Usar campo categoria se disponível
+        if "categoria" in produto and produto["categoria"]:
+            cat = produto["categoria"].lower().strip()
+            # Normalizar para plural
+            if not cat.endswith("s"):
+                cat += "s"
+            return cat
+        
+        # Fallback: extrair do nome
+        nome_lower = produto.get("nome", "").lower()
+        
+        # Mapeamento de palavras-chave para categorias
+        categorias_map = {
+            "queijo": "queijos",
+            "azeite": "azeites",
+            "cachaça": "cachaças",
+            "cachaca": "cachaças",
+            "vinho": "vinhos",
+            "doce": "doces",
+            "mel": "doces",
+            "café": "cafes",
+            "cafe": "cafes",
+            "biscoito": "biscoitos",
+            "pão": "paes",
+            "pao": "paes",
+        }
+        
+        for palavra, categoria in categorias_map.items():
+            if palavra in nome_lower:
+                return categoria
+        
+        return "outros"
+    
+    def _infer_category_from_term(self, termo: str) -> str:
+        """
+        Infere categoria do termo de busca.
+        
+        Args:
+            termo: Termo de busca
+            
+        Returns:
+            Categoria normalizada (plural)
+        """
+        termo_lower = termo.lower().strip()
+        
+        # Normalizar para plural
+        categorias_map = {
+            "queijo": "queijos",
+            "queijos": "queijos",
+            "azeite": "azeites",
+            "azeites": "azeites",
+            "cachaça": "cachaças",
+            "cachaca": "cachaças",
+            "cachaças": "cachaças",
+            "vinho": "vinhos",
+            "vinhos": "vinhos",
+            "doce": "doces",
+            "doces": "doces",
+            "café": "cafes",
+            "cafe": "cafes",
+            "cafes": "cafes",
+        }
+        
+        for palavra, categoria in categorias_map.items():
+            if palavra in termo_lower:
+                return categoria
+        
+        return termo_lower
+    
+    def save_product_choice(
+        self,
+        phone: str,
+        produto: dict,
+        quantidade: int
+    ):
+        """
+        Salva produto adicionado ao carrinho no histórico de escolhas.
+        
+        Args:
+            phone: Telefone do cliente
+            produto: Dados do produto
+            quantidade: Quantidade adicionada
+        """
+        if phone not in self._product_choices_history:
+            self._product_choices_history[phone] = {}
+        
+        categoria = self._infer_category_from_product(produto)
+        
+        # Se já existe escolha nessa categoria, atualizar quantidade
+        if categoria in self._product_choices_history[phone]:
+            escolha_anterior = self._product_choices_history[phone][categoria]
+            # Se é o mesmo produto, somar quantidade
+            if escolha_anterior["produto"]["id"] == produto["id"]:
+                escolha_anterior["quantidade_total"] += quantidade
+                escolha_anterior["timestamp"] = datetime.utcnow()
+                logger.info(f"📝 Escolha atualizada: {categoria} -> {escolha_anterior['quantidade_total']} un")
+                return
+        
+        # Nova escolha (ou produto diferente na mesma categoria)
+        self._product_choices_history[phone][categoria] = {
+            "produto": produto,
+            "timestamp": datetime.utcnow(),
+            "quantidade_total": quantidade
+        }
+        logger.info(f"💾 Nova escolha salva: {produto.get('nome')} (cat: {categoria})")
+    
+    def get_last_choice_by_category(
+        self,
+        phone: str,
+        categoria: str,
+        max_age_seconds: int = 1800
+    ) -> Optional[dict]:
+        """
+        Recupera última escolha de produto por categoria.
+        
+        Args:
+            phone: Telefone do cliente
+            categoria: Categoria do produto
+            max_age_seconds: Idade máxima da escolha (30min padrão)
+            
+        Returns:
+            Dict com escolha ou None se não encontrada/expirada
+        """
+        if phone not in self._product_choices_history:
+            return None
+        
+        if categoria not in self._product_choices_history[phone]:
+            return None
+        
+        escolha = self._product_choices_history[phone][categoria]
+        age = (datetime.utcnow() - escolha["timestamp"]).total_seconds()
+        
+        if age > max_age_seconds:
+            logger.info(f"⏰ Escolha de {categoria} expirada ({age:.0f}s)")
+            return None
+        
+        return escolha
+    
+    def get_last_choice_by_term(
+        self,
+        phone: str,
+        termo: str,
+        max_age_seconds: int = 1800
+    ) -> Optional[dict]:
+        """
+        Recupera última escolha usando termo de busca.
+        
+        Args:
+            phone: Telefone do cliente
+            termo: Termo de busca (ex: "azeite")
+            max_age_seconds: Idade máxima da escolha
+            
+        Returns:
+            Dict com escolha ou None
+        """
+        categoria = self._infer_category_from_term(termo)
+        return self.get_last_choice_by_category(phone, categoria, max_age_seconds)
 
     # ==================== Memória Persistente (Atlas) ====================
 
