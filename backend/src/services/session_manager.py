@@ -1,646 +1,112 @@
 """
-Gerenciador de sessões para controle humano-agente
+Gerenciador de sessões para controle humano-agente.
 
-Funcionalidades:
-- Detecta quando humano assume conversa
-- Pausa/retoma agente automaticamente
-- Processa comandos de controle (/pausar, /retomar, etc)
-- Mantém estado de cada sessão
-- Memória persistente de preferências e aprendizados
+Funcionalidades mantidas:
+- Controle de modo (AGENT/HUMAN/PAUSED)
+- Buffer de mensagens (mensagens rápidas consecutivas)
+- Comandos de controle (/pausar, /retomar, /assumir, /liberar, /status, /help)
+- Detecção de indicadores humanos ([HUMANO], [ATENDENTE])
+- Auto-resume após inatividade do humano
 """
 import re
-import sys
-import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from loguru import logger
 
-# Tentar importar sistema de memória persistente (opcional)
-try:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
-    from memory.memory import memory_write, memory_read
-    MEMORY_AVAILABLE = True
-    logger.info("✅ Sistema de memória persistente disponível")
-except ImportError:
-    MEMORY_AVAILABLE = False
-    logger.warning("⚠️ Sistema de memória persistente não disponível (usando apenas memória em RAM)")
-    # Funções mock para não quebrar o código
-    def memory_write(*args, **kwargs):
-        return {"id": "mock", "content": kwargs.get("content", "")}
-    def memory_read(*args, **kwargs):
-        return []
-
 from ..models.session import (
-    SessionStatus, SessionMode, MessageSource,
-    CommandResult, WhatsAppMessage
+    SessionStatus,
+    SessionMode,
+    MessageSource,
+    CommandResult,
 )
 
 
 class SessionManager:
-    """Gerenciador de sessões de atendimento"""
+    """Gerenciador de sessões de atendimento."""
 
-    # Comandos disponíveis (podem ser enviados por humanos)
     COMMANDS = {
         "/pausar": "Pausa o agente para essa conversa",
         "/retomar": "Retoma o agente para essa conversa",
-        "/status": "Mostra status atual da sessão",
+        "/status": "Mostra status atual da sessao",
         "/assumir": "Humano assume o atendimento",
         "/liberar": "Libera conversa de volta para o agente",
-        "/help": "Lista comandos disponíveis"
+        "/help": "Lista comandos disponiveis",
     }
 
-    # Padrões que indicam interferência humana
     HUMAN_INDICATORS = [
-        r"^\[HUMANO\]",  # Prefixo explícito
+        r"^\[HUMANO\]",
         r"^\[ATENDENTE\]",
         r"^@agente pause",
         r"^@bot pare",
     ]
 
-    def __init__(self, redis_client=None):
-        """
-        Args:
-            redis_client: Cliente Redis para persistência (opcional)
-                         Se None, usa dict em memória
-        """
-        self.redis = redis_client
+    def __init__(self):
         self._sessions: Dict[str, SessionStatus] = {}
         self._auto_pause_timeout = 300  # 5min sem resposta do humano -> retoma bot
+        self._message_buffer: Dict[str, dict] = {}
 
-        # Memória conversacional: histórico de mensagens por telefone
-        self._conversation_history: Dict[str, list] = {}
-        # Timeout para considerar "nova conversa" (em segundos)
-        self._new_conversation_timeout = 1800  # 30 minutos
-        
-        # Contexto de produtos: últimos produtos mostrados por telefone
-        self._last_products_shown: Dict[str, list] = {}
-        
-        # Contexto de assunto da conversa (para continuidade)
-        # {phone: {"termo": "azeite", "timestamp": datetime, "produtos_ids": [...], "produtos": [...], "categoria": "azeites"}}
-        self._conversation_subject: Dict[str, dict] = {}
-        
-        # Histórico de escolhas por categoria (NOVO - memória de produtos adicionados)
-        # {phone: {
-        #    "azeites": {"produto": {...}, "timestamp": datetime, "quantidade_total": 3},
-        #    "queijos": {"produto": {...}, "timestamp": datetime, "quantidade_total": 2}
-        # }}
-        self._product_choices_history: Dict[str, dict] = {}
-        
-        # Buffer de mensagens: aguarda mensagens em sequência rápida
-        self._message_buffer: Dict[str, dict] = {}  # {phone: {"messages": [], "timer": timestamp}}
-
-    # ==================== Controle de Sessão ====================
+    # ==================== Sessão ====================
 
     def get_session(self, phone: str) -> SessionStatus:
-        """Obtém ou cria status de sessão"""
+        """Obtém ou cria status de sessão."""
         if phone not in self._sessions:
             self._sessions[phone] = SessionStatus(
-                phone=phone,
-                mode=SessionMode.AGENT
+                phone=phone, mode=SessionMode.AGENT
             )
         return self._sessions[phone]
 
-    # ==================== Memória Conversacional ====================
+    def is_agent_active(self, phone: str) -> bool:
+        return self.get_session(phone).mode == SessionMode.AGENT
 
-    def add_to_history(self, phone: str, role: str, message: str):
-        """
-        Adiciona mensagem ao histórico da conversa.
+    def is_human_active(self, phone: str) -> bool:
+        return self.get_session(phone).mode == SessionMode.HUMAN
 
-        Args:
-            phone: Número do telefone
-            role: "user" ou "assistant"
-            message: Conteúdo da mensagem
-        """
-        if phone not in self._conversation_history:
-            self._conversation_history[phone] = []
-
-        self._conversation_history[phone].append({
-            "role": role,
-            "content": message,
-            "timestamp": datetime.utcnow()
-        })
-
-        # Manter apenas últimas 20 mensagens para não crescer infinitamente
-        if len(self._conversation_history[phone]) > 20:
-            self._conversation_history[phone] = self._conversation_history[phone][-20:]
-
-    def is_new_conversation(self, phone: str) -> bool:
-        """
-        Verifica se é uma nova conversa (sem histórico recente).
-
-        Returns:
-            True se é nova conversa ou última mensagem foi há mais de 30min
-        """
-        if phone not in self._conversation_history:
-            return True
-
-        if not self._conversation_history[phone]:
-            return True
-
-        last_message = self._conversation_history[phone][-1]
-        time_since_last = datetime.utcnow() - last_message["timestamp"]
-
-        return time_since_last.total_seconds() > self._new_conversation_timeout
-
-    def has_recent_conversation(self, phone: str) -> bool:
-        """
-        Verifica se teve conversa recente (oposto de is_new_conversation).
-
-        Returns:
-            True se houve mensagens nos últimos 30 minutos
-        """
-        return not self.is_new_conversation(phone)
-
-    def get_conversation_history(self, phone: str, limit: int = 10) -> list:
-        """
-        Retorna histórico da conversa.
-
-        Args:
-            phone: Número do telefone
-            limit: Número máximo de mensagens a retornar
-
-        Returns:
-            Lista de mensagens mais recentes
-        """
-        if phone not in self._conversation_history:
-            return []
-
-        return self._conversation_history[phone][-limit:]
-
-    def clear_conversation(self, phone: str):
-        """Limpa histórico de conversa."""
-        if phone in self._conversation_history:
-            self._conversation_history[phone] = []
-    
-    def set_last_products_shown(self, phone: str, products: list):
-        """
-        Salva lista de produtos mostrados ao cliente.
-        
-        Args:
-            phone: Número do telefone
-            products: Lista de produtos com ID
-        """
-        self._last_products_shown[phone] = products
-        logger.info(f"💾 Salvos {len(products)} produtos no contexto de {phone[:8]}...")
-    
-    def get_last_products_shown(self, phone: str) -> list:
-        """
-        Recupera últimos produtos mostrados ao cliente.
-        
-        Returns:
-            Lista de produtos ou lista vazia
-        """
-        return self._last_products_shown.get(phone, [])
-    
-    def get_product_by_number(self, phone: str, number: int) -> Optional[dict]:
-        """
-        Recupera produto por número da lista (1-based index).
-        
-        Args:
-            phone: Número do telefone
-            number: Número do produto na lista (1, 2, 3, etc)
-            
-        Returns:
-            Produto ou None se não encontrado
-        """
-        products = self.get_last_products_shown(phone)
-        if not products or number < 1 or number > len(products):
-            return None
-        return products[number - 1]  # Converte para 0-based index
-    
     # ==================== Buffer de Mensagens ====================
-    
+
     def add_to_buffer(self, phone: str, message: str) -> dict:
         """
         Adiciona mensagem ao buffer de espera.
-        
-        Args:
-            phone: Número do telefone
-            message: Mensagem recebida
-            
-        Returns:
-            dict com buffer atual: {"messages": [...], "should_wait": bool, "combined": str}
+        Aguarda mensagens consecutivas antes de processar.
         """
         now = datetime.utcnow()
-        
-        # Inicializar buffer se não existe
+
         if phone not in self._message_buffer:
             self._message_buffer[phone] = {
                 "messages": [],
-                "first_message_time": now
+                "first_message_time": now,
             }
-        
+
         buffer = self._message_buffer[phone]
-        
-        # Adicionar mensagem ao buffer
-        buffer["messages"].append({
-            "text": message,
-            "timestamp": now
-        })
-        
-        # Calcular tempo desde primeira mensagem
+        buffer["messages"].append({"text": message, "timestamp": now})
+
         time_since_first = (now - buffer["first_message_time"]).total_seconds()
-        
-        # Decisão: aguardar mais mensagens ou processar?
-        # Aguarda se:
-        # - Tem menos de 3 mensagens E
-        # - Tempo desde primeira < 5 segundos
         should_wait = len(buffer["messages"]) < 3 and time_since_first < 5.0
-        
-        # Combinar todas as mensagens do buffer
         combined = " ".join([msg["text"] for msg in buffer["messages"]])
-        
-        logger.info(f"📦 Buffer {phone[:8]}: {len(buffer['messages'])} msgs, aguardar={should_wait}")
-        
+
+        logger.info(
+            f"Buffer {phone[:8]}: {len(buffer['messages'])} msgs, aguardar={should_wait}"
+        )
+
         return {
             "messages": buffer["messages"],
             "should_wait": should_wait,
             "combined": combined,
-            "count": len(buffer["messages"])
+            "count": len(buffer["messages"]),
         }
-    
+
     def clear_buffer(self, phone: str):
         """Limpa buffer de mensagens."""
         if phone in self._message_buffer:
             del self._message_buffer[phone]
-            logger.info(f"🗑️ Buffer limpo para {phone[:8]}")
-    
-    # ==================== Contexto Conversacional ====================
-    
-    def set_conversation_subject(
-        self,
-        phone: str,
-        termo: str,
-        produtos_ids: List[str],
-        produtos: List[dict],
-        categoria: Optional[str] = None
-    ):
-        """
-        Salva assunto da conversa atual para manter contexto.
-        
-        Args:
-            phone: Telefone do cliente
-            termo: Termo de busca usado
-            produtos_ids: IDs dos produtos mostrados
-            produtos: Lista completa de produtos
-            categoria: Categoria inferida (opcional)
-        """
-        self._conversation_subject[phone] = {
-            "termo": termo,
-            "timestamp": datetime.utcnow(),
-            "produtos_ids": produtos_ids,
-            "produtos": produtos,
-            "categoria": categoria or self._infer_category_from_term(termo)
-        }
-        logger.info(f"💭 Assunto salvo para {phone[:8]}: {termo} (cat: {categoria or 'auto'})")
-    
-    def get_conversation_subject(self, phone: str, max_age_seconds: int = 600) -> Optional[dict]:
-        """
-        Recupera assunto da conversa se ainda válido (timeout 10min por padrão).
-        
-        Args:
-            phone: Telefone do cliente
-            max_age_seconds: Idade máxima do contexto em segundos
-            
-        Returns:
-            Dict com contexto ou None se expirado
-        """
-        if phone not in self._conversation_subject:
-            return None
-        
-        context = self._conversation_subject[phone]
-        age = (datetime.utcnow() - context["timestamp"]).total_seconds()
-        
-        if age > max_age_seconds:
-            logger.info(f"⏰ Contexto de {phone[:8]} expirado ({age:.0f}s)")
-            return None
-        
-        return context
-    
-    def get_context_for_classification(self, phone: str) -> Optional[Dict]:
-        """
-        Retorna contexto resumido para o classificador de intent.
-        
-        Args:
-            phone: Telefone do cliente
-            
-        Returns:
-            Dict com contexto resumido ou None
-        """
-        subject = self.get_conversation_subject(phone)
-        if not subject:
-            return None
-        
-        return {
-            "assunto": subject["termo"],
-            "categoria": subject["categoria"],
-            "produtos_mostrados": len(subject["produtos_ids"])
-        }
-    
-    # ==================== Memória de Escolhas por Categoria ====================
-    
-    def _infer_category_from_product(self, produto: dict) -> str:
-        """
-        Infere categoria do produto.
-        
-        Args:
-            produto: Dados do produto
-            
-        Returns:
-            Categoria normalizada (plural)
-        """
-        # Usar campo categoria se disponível
-        if "categoria" in produto and produto["categoria"]:
-            cat = produto["categoria"].lower().strip()
-            # Normalizar para plural
-            if not cat.endswith("s"):
-                cat += "s"
-            return cat
-        
-        # Fallback: extrair do nome
-        nome_lower = produto.get("nome", "").lower()
-        
-        # Mapeamento de palavras-chave para categorias
-        categorias_map = {
-            "queijo": "queijos",
-            "azeite": "azeites",
-            "cachaça": "cachaças",
-            "cachaca": "cachaças",
-            "vinho": "vinhos",
-            "doce": "doces",
-            "mel": "doces",
-            "café": "cafes",
-            "cafe": "cafes",
-            "biscoito": "biscoitos",
-            "pão": "paes",
-            "pao": "paes",
-        }
-        
-        for palavra, categoria in categorias_map.items():
-            if palavra in nome_lower:
-                return categoria
-        
-        return "outros"
-    
-    def _infer_category_from_term(self, termo: str) -> str:
-        """
-        Infere categoria do termo de busca.
-        
-        Args:
-            termo: Termo de busca
-            
-        Returns:
-            Categoria normalizada (plural)
-        """
-        termo_lower = termo.lower().strip()
-        
-        # Normalizar para plural
-        categorias_map = {
-            "queijo": "queijos",
-            "queijos": "queijos",
-            "azeite": "azeites",
-            "azeites": "azeites",
-            "cachaça": "cachaças",
-            "cachaca": "cachaças",
-            "cachaças": "cachaças",
-            "vinho": "vinhos",
-            "vinhos": "vinhos",
-            "doce": "doces",
-            "doces": "doces",
-            "café": "cafes",
-            "cafe": "cafes",
-            "cafes": "cafes",
-        }
-        
-        for palavra, categoria in categorias_map.items():
-            if palavra in termo_lower:
-                return categoria
-        
-        return termo_lower
-    
-    def save_product_choice(
-        self,
-        phone: str,
-        produto: dict,
-        quantidade: int
-    ):
-        """
-        Salva produto adicionado ao carrinho no histórico de escolhas.
-        
-        Args:
-            phone: Telefone do cliente
-            produto: Dados do produto
-            quantidade: Quantidade adicionada
-        """
-        if phone not in self._product_choices_history:
-            self._product_choices_history[phone] = {}
-        
-        categoria = self._infer_category_from_product(produto)
-        
-        # Se já existe escolha nessa categoria, atualizar quantidade
-        if categoria in self._product_choices_history[phone]:
-            escolha_anterior = self._product_choices_history[phone][categoria]
-            # Se é o mesmo produto, somar quantidade
-            if escolha_anterior["produto"]["id"] == produto["id"]:
-                escolha_anterior["quantidade_total"] += quantidade
-                escolha_anterior["timestamp"] = datetime.utcnow()
-                logger.info(f"📝 Escolha atualizada: {categoria} -> {escolha_anterior['quantidade_total']} un")
-                return
-        
-        # Nova escolha (ou produto diferente na mesma categoria)
-        self._product_choices_history[phone][categoria] = {
-            "produto": produto,
-            "timestamp": datetime.utcnow(),
-            "quantidade_total": quantidade
-        }
-        logger.info(f"💾 Nova escolha salva: {produto.get('nome')} (cat: {categoria})")
-    
-    def get_last_choice_by_category(
-        self,
-        phone: str,
-        categoria: str,
-        max_age_seconds: int = 1800
-    ) -> Optional[dict]:
-        """
-        Recupera última escolha de produto por categoria.
-        
-        Args:
-            phone: Telefone do cliente
-            categoria: Categoria do produto
-            max_age_seconds: Idade máxima da escolha (30min padrão)
-            
-        Returns:
-            Dict com escolha ou None se não encontrada/expirada
-        """
-        if phone not in self._product_choices_history:
-            return None
-        
-        if categoria not in self._product_choices_history[phone]:
-            return None
-        
-        escolha = self._product_choices_history[phone][categoria]
-        age = (datetime.utcnow() - escolha["timestamp"]).total_seconds()
-        
-        if age > max_age_seconds:
-            logger.info(f"⏰ Escolha de {categoria} expirada ({age:.0f}s)")
-            return None
-        
-        return escolha
-    
-    def get_last_choice_by_term(
-        self,
-        phone: str,
-        termo: str,
-        max_age_seconds: int = 1800
-    ) -> Optional[dict]:
-        """
-        Recupera última escolha usando termo de busca.
-        
-        Args:
-            phone: Telefone do cliente
-            termo: Termo de busca (ex: "azeite")
-            max_age_seconds: Idade máxima da escolha
-            
-        Returns:
-            Dict com escolha ou None
-        """
-        categoria = self._infer_category_from_term(termo)
-        return self.get_last_choice_by_category(phone, categoria, max_age_seconds)
 
-    # ==================== Memória Persistente (Atlas) ====================
-
-    def save_customer_preference(
-        self,
-        phone: str,
-        preference: str,
-        category: Optional[str] = None
-    ) -> Dict:
-        """
-        Salva preferência do cliente na memória persistente.
-
-        Args:
-            phone: Número do telefone
-            preference: Preferência detectada
-            category: Categoria (ex: "produto", "entrega", "pagamento")
-
-        Example:
-            >>> save_customer_preference(
-            ...     "5531999999999",
-            ...     "Gosta de queijos meia-cura",
-            ...     "produto"
-            ... )
-        """
-        tags = [f"cliente:{phone}"]
-        if category:
-            tags.append(f"categoria:{category}")
-
-        entry = memory_write(
-            content=preference,
-            type="preference",
-            tags=tags,
-            metadata={"phone": phone, "category": category}
-        )
-
-        logger.info(f"💾 Preferência salva: {preference} (cliente: {phone[:8]}...)")
-        return entry
-
-    def save_customer_learning(
-        self,
-        phone: str,
-        learning: str,
-        context: Optional[str] = None
-    ) -> Dict:
-        """
-        Salva aprendizado sobre comportamento do cliente.
-
-        Args:
-            phone: Número do telefone
-            learning: Aprendizado detectado
-            context: Contexto adicional
-
-        Example:
-            >>> save_customer_learning(
-            ...     "5531999999999",
-            ...     "Sempre pergunta sobre prazo de entrega",
-            ...     "padrão de perguntas"
-            ... )
-        """
-        tags = [f"cliente:{phone}"]
-        if context:
-            tags.append(f"contexto:{context}")
-
-        entry = memory_write(
-            content=learning,
-            type="learning",
-            tags=tags,
-            metadata={"phone": phone, "context": context}
-        )
-
-        logger.info(f"📖 Aprendizado salvo: {learning} (cliente: {phone[:8]}...)")
-        return entry
-
-    def get_customer_preferences(self, phone: str, limit: int = 10) -> List[Dict]:
-        """
-        Recupera preferências salvas do cliente.
-
-        Args:
-            phone: Número do telefone
-            limit: Máximo de resultados
-
-        Returns:
-            Lista de preferências
-        """
-        return memory_read(
-            type="preference",
-            tags=[f"cliente:{phone}"],
-            limit=limit
-        )
-
-    def get_customer_learnings(self, phone: str, limit: int = 10) -> List[Dict]:
-        """
-        Recupera aprendizados sobre o cliente.
-
-        Args:
-            phone: Número do telefone
-            limit: Máximo de resultados
-
-        Returns:
-            Lista de aprendizados
-        """
-        return memory_read(
-            type="learning",
-            tags=[f"cliente:{phone}"],
-            limit=limit
-        )
-
-    def is_agent_active(self, phone: str) -> bool:
-        """Verifica se o agente está ativo para essa conversa"""
-        session = self.get_session(phone)
-        return session.mode == SessionMode.AGENT
-
-    def is_human_active(self, phone: str) -> bool:
-        """Verifica se humano está atendendo"""
-        session = self.get_session(phone)
-        return session.mode == SessionMode.HUMAN
-
-    # ==================== Detecção Automática ====================
+    # ==================== Detecção Humana ====================
 
     def detect_human_interference(self, message: str) -> bool:
-        """
-        Detecta se mensagem indica interferência humana
-
-        Exemplos que detectam:
-        - [HUMANO] Olá, sou o João...
-        - [ATENDENTE] Vou te ajudar...
-        - @agente pause
-        """
-        message_lower = message.lower().strip()
-
+        """Detecta se mensagem indica interferência humana."""
         for pattern in self.HUMAN_INDICATORS:
             if re.match(pattern, message, re.IGNORECASE):
-                logger.info(f"Detectada interferência humana: {pattern}")
+                logger.info(f"Detectada interferencia humana: {pattern}")
                 return True
-
         return False
 
     def process_message(
@@ -648,23 +114,17 @@ class SessionManager:
         phone: str,
         message: str,
         source: MessageSource,
-        attendant_id: Optional[str] = None
+        attendant_id: Optional[str] = None,
     ) -> tuple[bool, Optional[str]]:
         """
-        Processa mensagem e determina se agente deve responder
+        Processa mensagem e determina se agente deve responder.
 
         Returns:
             (should_agent_respond, reason)
-
-        Exemplos:
-            - Cliente manda msg + agente ativo = (True, None)
-            - Cliente manda msg + humano ativo = (False, "humano atendendo")
-            - Humano manda msg = (False, "detectado humano") + pausa agente
         """
         session = self.get_session(phone)
         now = datetime.utcnow()
 
-        # Atualiza timestamp
         if source == MessageSource.CUSTOMER:
             session.last_customer_message = now
         elif source == MessageSource.HUMAN:
@@ -672,40 +132,36 @@ class SessionManager:
         elif source == MessageSource.AGENT:
             session.last_agent_message = now
 
-        # 1. Se é comando, processa e não deixa agente responder
+        # Comando
         if message.startswith("/"):
             self._process_command(phone, message, attendant_id)
             return False, "comando processado"
 
-        # 2. Se mensagem é de humano, pausa agente automaticamente
+        # Humano enviando mensagem
         if source == MessageSource.HUMAN:
             if session.mode != SessionMode.HUMAN:
-                logger.info(f"Humano assumiu conversa: {phone}")
                 self._set_mode(phone, SessionMode.HUMAN, attendant_id)
-            return False, "humano está atendendo"
+            return False, "humano esta atendendo"
 
-        # 3. Se detecta interferência humana na mensagem
+        # Indicador de humano no texto
         if self.detect_human_interference(message):
-            logger.warning(f"Detectada interferência humana em: {phone}")
             self._set_mode(phone, SessionMode.HUMAN, "auto-detected")
-            return False, "interferência humana detectada"
+            return False, "interferencia humana detectada"
 
-        # 4. Se é mensagem do cliente e humano está ativo
+        # Cliente + humano ativo
         if source == MessageSource.CUSTOMER and session.mode == SessionMode.HUMAN:
-            # Verifica se humano ficou inativo (auto-retoma)
             if self._should_auto_resume(session):
-                logger.info(f"Auto-retomando agente para: {phone}")
                 self._set_mode(phone, SessionMode.AGENT)
                 return True, None
             return False, "aguardando humano"
 
-        # 5. Se é mensagem do cliente e agente está ativo
+        # Cliente + agente ativo
         if source == MessageSource.CUSTOMER and session.mode == SessionMode.AGENT:
             return True, None
 
-        # 6. Sessão pausada
+        # Pausado
         if session.mode == SessionMode.PAUSED:
-            return False, "sessão pausada"
+            return False, "sessao pausada"
 
         return False, "modo desconhecido"
 
@@ -715,123 +171,94 @@ class SessionManager:
         self,
         phone: str,
         command: str,
-        attendant_id: Optional[str] = None
+        attendant_id: Optional[str] = None,
     ) -> CommandResult:
-        """Processa comandos de controle"""
         cmd = command.split()[0].lower()
-        session = self.get_session(phone)
 
-        if cmd == "/pausar":
-            return self._cmd_pause(phone, attendant_id)
-        elif cmd == "/retomar":
-            return self._cmd_resume(phone, attendant_id)
-        elif cmd == "/assumir":
-            return self._cmd_takeover(phone, attendant_id)
-        elif cmd == "/liberar":
-            return self._cmd_release(phone, attendant_id)
-        elif cmd == "/status":
-            return self._cmd_status(phone)
-        elif cmd == "/help":
-            return self._cmd_help()
-        else:
-            return CommandResult(
-                success=False,
-                message=f"Comando desconhecido: {cmd}\nUse /help para ver comandos."
-            )
+        handlers = {
+            "/pausar": self._cmd_pause,
+            "/retomar": self._cmd_resume,
+            "/assumir": self._cmd_takeover,
+            "/liberar": self._cmd_resume,
+            "/status": lambda p, a: self._cmd_status(p),
+            "/help": lambda p, a: self._cmd_help(),
+        }
+
+        handler = handlers.get(cmd)
+        if handler:
+            return handler(phone, attendant_id)
+
+        return CommandResult(
+            success=False,
+            message=f"Comando desconhecido: {cmd}\nUse /help para ver comandos.",
+        )
 
     def _cmd_pause(self, phone: str, attendant_id: Optional[str]) -> CommandResult:
-        """Comando: /pausar - Pausa o agente"""
         session = self.get_session(phone)
         previous = session.mode
-
         session.mode = SessionMode.PAUSED
         session.paused_at = datetime.utcnow()
         session.paused_by = attendant_id
-
-        logger.info(f"Sessão pausada: {phone} por {attendant_id}")
-
+        logger.info(f"Sessao pausada: {phone} por {attendant_id}")
         return CommandResult(
             success=True,
-            message="✅ Agente pausado. Use /retomar para reativar.",
+            message="Agente pausado. Use /retomar para reativar.",
             previous_mode=previous,
-            current_mode=SessionMode.PAUSED
+            current_mode=SessionMode.PAUSED,
         )
 
     def _cmd_resume(self, phone: str, attendant_id: Optional[str]) -> CommandResult:
-        """Comando: /retomar - Retoma o agente"""
         session = self.get_session(phone)
         previous = session.mode
-
         self._set_mode(phone, SessionMode.AGENT, attendant_id)
-
         logger.info(f"Agente retomado: {phone} por {attendant_id}")
-
         return CommandResult(
             success=True,
-            message="✅ Agente retomado. Voltarei a responder automaticamente.",
+            message="Agente retomado. Voltarei a responder automaticamente.",
             previous_mode=previous,
-            current_mode=SessionMode.AGENT
+            current_mode=SessionMode.AGENT,
         )
 
     def _cmd_takeover(self, phone: str, attendant_id: Optional[str]) -> CommandResult:
-        """Comando: /assumir - Humano assume"""
         session = self.get_session(phone)
         previous = session.mode
-
         self._set_mode(phone, SessionMode.HUMAN, attendant_id)
-
         logger.info(f"Humano assumiu: {phone} ({attendant_id})")
-
         return CommandResult(
             success=True,
-            message=f"✅ Atendimento assumido por {attendant_id or 'humano'}. Agente pausado.",
+            message=f"Atendimento assumido por {attendant_id or 'humano'}. Agente pausado.",
             previous_mode=previous,
-            current_mode=SessionMode.HUMAN
+            current_mode=SessionMode.HUMAN,
         )
 
-    def _cmd_release(self, phone: str, attendant_id: Optional[str]) -> CommandResult:
-        """Comando: /liberar - Libera para o agente"""
-        return self._cmd_resume(phone, attendant_id)
-
     def _cmd_status(self, phone: str) -> CommandResult:
-        """Comando: /status - Mostra status"""
         session = self.get_session(phone)
-
         mode_emoji = {
-            SessionMode.AGENT: "🤖",
-            SessionMode.HUMAN: "👤",
-            SessionMode.PAUSED: "⏸️"
+            SessionMode.AGENT: "BOT",
+            SessionMode.HUMAN: "HUMANO",
+            SessionMode.PAUSED: "PAUSADO",
         }
-
-        status_msg = f"""
-📊 Status da Sessão
-━━━━━━━━━━━━━━━━
-📞 Cliente: {phone}
-{mode_emoji.get(session.mode, '❓')} Modo: {session.mode.value.upper()}
-👤 Atendente: {session.human_attendant or 'Nenhum'}
-⏰ Última msg cliente: {self._format_time(session.last_customer_message)}
-🤖 Última msg agente: {self._format_time(session.last_agent_message)}
-👨 Última msg humano: {self._format_time(session.last_human_message)}
-        """.strip()
-
+        status_msg = (
+            f"Status da Sessao\n"
+            f"Cliente: {phone}\n"
+            f"Modo: {mode_emoji.get(session.mode, '?')}\n"
+            f"Atendente: {session.human_attendant or 'Nenhum'}\n"
+            f"Ultima msg cliente: {self._format_time(session.last_customer_message)}\n"
+            f"Ultima msg agente: {self._format_time(session.last_agent_message)}\n"
+            f"Ultima msg humano: {self._format_time(session.last_human_message)}"
+        )
         return CommandResult(
             success=True,
             message=status_msg,
             current_mode=session.mode,
-            data=session.dict()
+            data=session.dict(),
         )
 
     def _cmd_help(self) -> CommandResult:
-        """Comando: /help - Lista comandos"""
-        help_msg = "🔧 Comandos Disponíveis\n━━━━━━━━━━━━━━━━\n\n"
-
+        help_msg = "Comandos Disponiveis\n\n"
         for cmd, desc in self.COMMANDS.items():
-            help_msg += f"{cmd}\n  → {desc}\n\n"
-
-        return CommandResult(
-            success=True,
-            message=help_msg.strip()
-        )
+            help_msg += f"{cmd} - {desc}\n"
+        return CommandResult(success=True, message=help_msg.strip())
 
     # ==================== Helpers ====================
 
@@ -839,12 +266,10 @@ class SessionManager:
         self,
         phone: str,
         mode: SessionMode,
-        attendant_id: Optional[str] = None
+        attendant_id: Optional[str] = None,
     ):
-        """Define modo da sessão"""
         session = self.get_session(phone)
         session.mode = mode
-
         if mode == SessionMode.HUMAN and attendant_id:
             session.human_attendant = attendant_id
         elif mode == SessionMode.AGENT:
@@ -853,51 +278,22 @@ class SessionManager:
             session.paused_by = None
 
     def _should_auto_resume(self, session: SessionStatus) -> bool:
-        """
-        Verifica se deve retomar agente automaticamente
-        (humano ficou inativo por muito tempo)
-        """
         if session.mode != SessionMode.HUMAN:
             return False
-
         if not session.last_human_message:
             return False
-
         inactive_time = datetime.utcnow() - session.last_human_message
-
         return inactive_time > timedelta(seconds=self._auto_pause_timeout)
 
     def _format_time(self, dt: Optional[datetime]) -> str:
-        """Formata datetime para exibição"""
         if not dt:
             return "Nunca"
-
         delta = datetime.utcnow() - dt
-
         if delta.seconds < 60:
             return "Agora"
         elif delta.seconds < 3600:
-            return f"{delta.seconds // 60}min atrás"
+            return f"{delta.seconds // 60}min atras"
         elif delta.days == 0:
-            return f"{delta.seconds // 3600}h atrás"
+            return f"{delta.seconds // 3600}h atras"
         else:
-            return f"{delta.days}d atrás"
-
-    # ==================== Persistência ====================
-
-    def save_session(self, phone: str):
-        """Salva sessão no Redis (se disponível)"""
-        if not self.redis:
-            return
-
-        session = self.get_session(phone)
-        # TODO: Implementar salvamento no Redis
-        pass
-
-    def load_session(self, phone: str) -> Optional[SessionStatus]:
-        """Carrega sessão do Redis"""
-        if not self.redis:
-            return None
-
-        # TODO: Implementar carregamento do Redis
-        return None
+            return f"{delta.days}d atras"

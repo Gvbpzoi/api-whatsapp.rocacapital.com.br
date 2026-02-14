@@ -57,7 +57,7 @@ class TestSessionManager:
         )
 
         assert should_respond is False
-        assert reason == "humano está atendendo"
+        assert reason == "humano esta atendendo"
 
         # Verifica que modo mudou
         session = manager.get_session(phone)
@@ -165,7 +165,7 @@ class TestSessionManager:
         )
 
         assert result.success is True
-        assert "Status da Sessão" in result.message
+        assert "Status da Sessao" in result.message
         assert phone in result.message
 
     def test_command_help(self, manager):
@@ -222,7 +222,7 @@ class TestSessionManager:
         )
 
         assert should_respond is False
-        assert reason == "sessão pausada"
+        assert reason == "sessao pausada"
 
     def test_auto_resume_not_triggered_immediately(self, manager):
         """Testa que auto-retomada não acontece imediatamente"""
