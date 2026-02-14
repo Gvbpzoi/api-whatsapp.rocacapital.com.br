@@ -104,35 +104,74 @@ class SupabaseProdutos:
 
             # Filtro: termo de busca (nome, descrição, categoria, tags)
             # Usa UNACCENT para ignorar acentos: "cafes" encontra "Café" ✅
-            # Ordenação por relevância: nome > categoria > tags > descricao
+            # Multi-word: cada palavra é buscada separadamente com OR
+            # Isso permite que "trablha azeite" encontre "Azeite Irarema..."
+            # mesmo que "trablha" não exista em nenhum produto
             if termo:
-                query += """
-                    AND (
-                        unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
-                        OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
-                        OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
-                        OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
-                    )
-                """
-                termo_like = f"%{termo}%"
-                params.extend([termo_like, termo_like, termo_like, termo_like])
+                palavras = termo.strip().split()
+                if len(palavras) > 1:
+                    # Multi-word: cada palavra gera um bloco OR nos campos
+                    word_conditions = []
+                    for palavra in palavras:
+                        palavra_like = f"%{palavra}%"
+                        word_conditions.append("""(
+                            unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                        )""")
+                        params.extend([palavra_like, palavra_like, palavra_like, palavra_like])
+                    query += " AND (" + " OR ".join(word_conditions) + ")"
+                else:
+                    # Single word: busca simples
+                    query += """
+                        AND (
+                            unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                        )
+                    """
+                    termo_like = f"%{termo}%"
+                    params.extend([termo_like, termo_like, termo_like, termo_like])
 
             # Ordenar por relevância: prioriza match em nome, depois categoria, depois tags, depois descrição
-            query += """
-                ORDER BY
-                    CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
-                    CASE WHEN unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
-                    CASE WHEN unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
-                    nome ASC
-                LIMIT %s
-            """
+            # Para multi-word, ordena por quantas palavras casam no nome (mais = melhor)
             if termo:
-                termo_like = f"%{termo}%"
-                params.extend([termo_like, termo_like, termo_like])
+                palavras = termo.strip().split()
+                if len(palavras) > 1:
+                    # Score: count how many words match the name
+                    score_parts = []
+                    for palavra in palavras:
+                        palavra_like = f"%{palavra}%"
+                        score_parts.append("CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END")
+                        params.append(palavra_like)
+                    query += f" ORDER BY ({' + '.join(score_parts)}), nome ASC LIMIT %s"
+                    params.append(limite)
+                else:
+                    query += """
+                        ORDER BY
+                            CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            CASE WHEN unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            CASE WHEN unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            nome ASC
+                        LIMIT %s
+                    """
+                    termo_like = f"%{termo}%"
+                    params.extend([termo_like, termo_like, termo_like])
+                    params.append(limite)
             else:
                 # Se não tem termo, usar valores neutros para ordenação
+                query += """
+                    ORDER BY
+                        CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                        CASE WHEN unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                        CASE WHEN unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                        nome ASC
+                    LIMIT %s
+                """
                 params.extend(["%", "%", "%"])
-            params.append(limite)
+                params.append(limite)
 
             cursor.execute(query, params)
             produtos = cursor.fetchall()

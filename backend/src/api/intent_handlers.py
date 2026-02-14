@@ -264,6 +264,14 @@ def _greeting_prefix(ctx: HandlerContext) -> str:
 def handle_atendimento_inicial(ctx: HandlerContext) -> str:
     """Handle greetings and initial contact"""
     if not ctx.is_nova_conversa:
+        # Mirror the client's greeting when in a continuous conversation
+        msg = ctx.message.lower().strip()
+        if "bom dia" in msg:
+            return "Bom dia! Em que posso te ajudar?"
+        elif "boa tarde" in msg:
+            return "Boa tarde! Em que posso te ajudar?"
+        elif "boa noite" in msg:
+            return "Boa noite! Em que posso te ajudar?"
         return "Oi! Em que posso te ajudar?"
     return resp.gerar_saudacao_contextual(
         ctx.hora_mensagem, tem_pedido=False, nome_cliente=ctx.nome_cliente,

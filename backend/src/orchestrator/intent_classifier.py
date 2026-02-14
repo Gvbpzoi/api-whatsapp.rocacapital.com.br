@@ -231,11 +231,15 @@ class IntentClassifier:
         if word_lower.endswith("is") and len(word_lower) > 3:
             return word_lower[:-1]
         
-        # Regra 6: palavras terminadas em "es" com consoante antes -> remover "es" (ex: queijões -> queijão já coberto, mas queijares -> queijar)
-        # Para simplificar, removemos "es" se a palavra tem mais de 4 letras
+        # Regra 6: palavras terminadas em "es"
+        # Se o caractere antes de "es" é vogal, o plural é apenas "s" (azeite→azeites)
+        # Se é consoante, o plural é "es" (flor→flores)
         if word_lower.endswith("es") and len(word_lower) > 4:
-            # Verificar se é plural irregular (ex: cafés -> café)
-            return word_lower[:-2]
+            char_before_es = word_lower[-3]
+            if char_before_es in "aeiouáéíóúâêîôû":
+                return word_lower[:-1]  # "azeites" → "azeite"
+            else:
+                return word_lower[:-2]  # "flores" → "flor"
         
         # Regra 7: palavras terminadas em "s" (mais comum) -> remover "s"
         if word_lower.endswith("s") and len(word_lower) > 3:

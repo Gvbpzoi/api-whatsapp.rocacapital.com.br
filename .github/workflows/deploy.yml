@@ -65,6 +65,18 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
 
     steps:
+      - name: Verificar secrets SSH configurados
+        run: |
+          if [ -z "${{ secrets.HOSTINGER_HOST }}" ]; then
+            echo "::error::Secret HOSTINGER_HOST não configurado. Configure em Settings > Secrets > Actions."
+            exit 1
+          fi
+          if [ -z "${{ secrets.HOSTINGER_SSH_KEY }}" ]; then
+            echo "::error::Secret HOSTINGER_SSH_KEY não configurado. Configure em Settings > Secrets > Actions."
+            exit 1
+          fi
+          echo "Secrets SSH verificados."
+
       - name: Checkout código
         uses: actions/checkout@v4
 
@@ -74,23 +86,29 @@ jobs:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USER }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: ${{ secrets.HOSTINGER_PORT || 22 }}
+          port: ${{ secrets.HOSTINGER_PORT }}
+          script_stop: true
+          command_timeout: 5m
           script: |
+            set -e
+
             cd /var/www/agente-whatsapp
 
             # Pull código atualizado
             git pull origin main
 
             # Pull nova imagem Docker
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             docker pull ghcr.io/${{ github.repository_owner }}/agente-whatsapp:latest
 
             # Restart serviços
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d
 
             # Limpar imagens antigas
             docker image prune -af
+
+            echo "Deploy concluído com sucesso!"
 
   # Job 3: Health Check pós-deploy
   health-check:
@@ -104,16 +122,18 @@ jobs:
 
       - name: Verificar API está online
         run: |
-          curl -f https://api.seudominio.com/ || exit 1
+          curl -sf --retry 3 --retry-delay 10 \
+            https://${{ secrets.API_DOMAIN || 'api-whatsapp.rocacapital.com.br' }}/ \
+            -o /dev/null -w "HTTP %{http_code}" || {
+            echo "::warning::Health check falhou. Verifique se o serviço está rodando."
+            exit 1
+          }
+          echo "API está online!"
 
       - name: Notificar sucesso
         if: success()
-        run: |
-          echo "✅ Deploy realizado com sucesso!"
-          # TODO: Adicionar notificação Slack/Discord/Email
+        run: echo "Deploy realizado com sucesso!"
 
       - name: Notificar falha
         if: failure()
-        run: |
-          echo "❌ Deploy falhou! Verificar logs."
-          # TODO: Adicionar notificação de falha
+        run: echo "::error::Deploy falhou! Verificar logs do container no servidor."

@@ -17,6 +17,11 @@ services:
       - "${API_PORT:-8000}:8000"
 
     environment:
+      # ZAPI - WhatsApp API (obrigatório)
+      - ZAPI_INSTANCE_ID=${ZAPI_INSTANCE_ID}
+      - ZAPI_TOKEN=${ZAPI_TOKEN}
+      - ZAPI_CLIENT_TOKEN=${ZAPI_CLIENT_TOKEN}
+
       # Supabase
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
