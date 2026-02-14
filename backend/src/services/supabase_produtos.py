@@ -273,6 +273,46 @@ class SupabaseProdutos:
             logger.error(f"❌ Erro ao listar categorias: {e}")
             return []
 
+    def contar_por_termo(self, termo: str) -> int:
+        """
+        Conta quantos produtos disponíveis casam com um termo de busca.
+
+        Args:
+            termo: Termo de busca (ex: "doce", "cafe", "azeite")
+
+        Returns:
+            Número de produtos encontrados
+        """
+        if not self.database_url:
+            return 0
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            termo_like = f"%{termo}%"
+            cursor.execute("""
+                SELECT COUNT(*) as total
+                FROM produtos_site
+                WHERE ativo = TRUE
+                AND estoque_disponivel = TRUE
+                AND (
+                    unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
+                    OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
+                    OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                )
+            """, (termo_like, termo_like, termo_like))
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            return result[0] if result else 0
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao contar produtos para '{termo}': {e}")
+            return 0
+
     def buscar_produtos_em_destaque(self, limite: int = 10) -> List[Dict]:
         """
         Busca produtos em destaque

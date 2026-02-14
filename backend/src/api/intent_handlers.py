@@ -339,6 +339,38 @@ def handle_busca_produto(ctx: HandlerContext) -> str:
         logger.info("Pergunta genérica sobre produtos")
         return resp.RESPOSTA_PRODUTOS_DISPONIVEIS
 
+    # Check for multi-category query ("tem doce e cafe?")
+    category_terms = ic.extract_category_terms(ctx.message)
+    if category_terms and len(category_terms) >= 2:
+        logger.info(f"Multi-category query detected: {category_terms}")
+        contagens = th.contar_por_termos(category_terms)
+
+        # Only show categories that have products
+        categorias_com_produtos = {t: c for t, c in contagens.items() if c > 0}
+        categorias_sem_produtos = [t for t, c in contagens.items() if c == 0]
+
+        if categorias_com_produtos:
+            nomes = " e ".join(categorias_com_produtos.keys())
+            response = f"Sim, a gente trabalha com {nomes}!\n\n"
+
+            for termo, count in categorias_com_produtos.items():
+                # Capitalize first letter for display
+                nome_display = termo.capitalize()
+                response += f"{nome_display} - {count} produto{'s' if count > 1 else ''} disponível{'is' if count > 1 else ''}\n"
+
+            if categorias_sem_produtos:
+                sem = ", ".join(t.capitalize() for t in categorias_sem_produtos)
+                response += f"\nInfelizmente não encontrei produtos de {sem} no momento.\n"
+
+            response += "\nQuer ver os produtos de qual categoria?"
+            return response
+        else:
+            nomes = " e ".join(category_terms)
+            return (
+                f"Poxa, não encontrei produtos de {nomes} disponíveis no momento.\n\n"
+                f"Quer procurar por outra coisa?"
+            )
+
     # Extract search term
     termo = ic.extract_search_term(ctx.message)
 

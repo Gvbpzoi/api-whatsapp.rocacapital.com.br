@@ -191,6 +191,41 @@ class ToolsHelper:
             logger.error(f"❌ Erro na busca: {e}")
             return {"status": "error", "message": str(e)}
 
+    def contar_por_termos(self, termos: list) -> Dict[str, int]:
+        """
+        Conta produtos disponíveis para cada termo de busca.
+        Usado para responder perguntas multi-categoria como "tem doce e cafe?"
+
+        Args:
+            termos: Lista de termos (ex: ["doce", "cafe"])
+
+        Returns:
+            Dict com {termo: contagem} (ex: {"doce": 12, "cafe": 8})
+        """
+        resultado = {}
+        try:
+            if self.produtos_service and self.produtos_service.database_url:
+                for termo in termos:
+                    contagem = self.produtos_service.contar_por_termo(termo)
+                    resultado[termo] = contagem
+                    logger.info(f"📊 '{termo}': {contagem} produtos")
+            else:
+                # Mock fallback — partial match (termo in nome/categoria)
+                for termo in termos:
+                    termo_lower = termo.lower()
+                    count = sum(
+                        1 for p in self.mock_produtos
+                        if termo_lower in p["nome"].lower()
+                        or termo_lower in p.get("categoria", "").lower()
+                        or p["nome"].lower().startswith(termo_lower)
+                        or p.get("categoria", "").lower().startswith(termo_lower)
+                    )
+                    resultado[termo] = count
+        except Exception as e:
+            logger.error(f"❌ Erro ao contar por termos: {e}")
+
+        return resultado
+
     def adicionar_carrinho(self, telefone: str, produto_id: str, quantidade: int = 1) -> Dict[str, Any]:
         """
         Adiciona produto ao carrinho (AGORA COM PERSISTÊNCIA).

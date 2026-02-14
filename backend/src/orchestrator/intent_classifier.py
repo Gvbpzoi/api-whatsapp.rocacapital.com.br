@@ -514,20 +514,38 @@ Categoria:"""
         import string
         message_lower = message_lower.translate(str.maketrans('', '', string.punctuation))
 
+        # Preservar termos compostos conhecidos antes de filtrar stop words
+        # "doce de leite" → placeholder, depois restauramos
+        termos_compostos = {
+            "doce de leite": "doce_de_leite",
+            "pão de queijo": "pão_de_queijo",
+            "pao de queijo": "pao_de_queijo",
+            "mel de abelha": "mel_de_abelha",
+            "azeite de oliva": "azeite_de_oliva",
+            "queijo de cabra": "queijo_de_cabra",
+            "erva doce": "erva_doce",
+        }
+        for composto, placeholder in termos_compostos.items():
+            if composto in message_lower:
+                message_lower = message_lower.replace(composto, placeholder)
+
         # Remover palavras comuns de busca e conversação em português brasileiro
         stop_words = [
             # Verbos de busca/desejo
             "quero", "busco", "procuro", "tem", "têm", "tem", "vende", "vendem",
             "gostaria", "poderia", "pode", "queria", "gostava", "preciso", "necessito",
             "desejo", "tenho", "teria", "haveria",
-            # Verbos de ação (NOVO - Bug #2)
+            # Verbos de ação
             "cola", "coloca", "manda", "envia", "bota", "add", "adiciona",
-            # Verbos de disponibilidade/conversa (Bug #7 - "trabalha com azeites?")
+            "mostra", "mostre", "mande", "envie",
+            # Verbos de disponibilidade/conversa
             "trabalha", "trabalham", "funciona", "funcionam", "mexe", "mexem",
             "faz", "fazem", "lida", "lidam", "vender", "venda",
             "dizer", "diz", "diga", "falar", "fale", "fala",
             # Verbos de informação
-            "saber", "conhecer", "entender", "ver", "mostrar", "informar", "dizer",
+            "saber", "conhecer", "entender", "ver", "mostrar", "informar",
+            # Conjunções (IMPORTANTE: "e", "ou" poluem busca multi-categoria)
+            "e", "ou", "nem", "mas", "porém", "porem",
             # Preposições e conectivos
             "sobre", "de", "da", "do", "das", "dos", "em", "na", "no", "nas", "nos",
             "para", "pra", "com", "por", "pelo", "pela", "pelos", "pelas", "ao", "aos",
@@ -539,16 +557,21 @@ Categoria:"""
             "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
             "esse", "essa", "esses", "essas", "este", "esta", "estes", "estas",
             "aquele", "aquela", "aqueles", "aquelas", "isso", "isto", "aquilo",
-            "você", "voce", "vc",  # ADICIONADO - evita "você" como termo
-            # Pronomes adicionais (NOVO - Bug #2)
+            "você", "voce", "vc",
             "eu", "ele", "ela", "eles", "elas", "nós", "vocês", "voces", "vcs",
             # Palavras interrogativas
             "quais", "qual", "que", "onde", "quando", "como", "porque", "por", "quanto",
             "quantos", "quantas", "quanta",
             # Palavras de cortesia/conversação
-            "favor", "obrigado", "obrigada", "obrigados", "obrigadas", "por", "pfv", "pf",
-            # Saudações (NOVO - Bug #2)
+            "favor", "obrigado", "obrigada", "obrigados", "obrigadas", "pfv", "pf",
+            # Saudações
             "boa", "bom", "tarde", "dia", "noite", "oi", "ola", "olá", "hey", "alo", "alô",
+            # Acknowledgments/confirmações (evita poluir busca)
+            "otimo", "ótimo", "ok", "certo", "beleza", "legal", "perfeito",
+            "maravilha", "massa", "show", "blz", "top",
+            "sim", "nao", "não", "claro", "certeza",
+            # Fillers de conversa
+            "aí", "ai", "aih", "entao", "então", "né", "ne", "tá", "ta",
             # Descritores genéricos
             "tipo", "tipos", "opcao", "opcoes", "opção", "opções", "disponivel", "disponiveis",
             "disponível", "disponíveis", "informacao", "informacoes", "informação", "informações",
@@ -558,16 +581,80 @@ Categoria:"""
             "ainda", "tambem", "também", "so", "só", "somente", "apenas",
         ]
 
+        stop_words_set = set(stop_words)
+
         words = message_lower.split()
-        filtered_words = [w for w in words if w not in stop_words]
-        
-        # Aplicar stemming (plural -> singular) em cada palavra (Bug #3)
+        filtered_words = [w for w in words if w not in stop_words_set]
+
+        # Aplicar stemming (plural -> singular) em cada palavra
         stemmed_words = [self._stem_portuguese_plural(w) for w in filtered_words]
 
-        if stemmed_words:
-            return " ".join(stemmed_words)
+        # Restaurar termos compostos
+        placeholders_reversos = {v: k for k, v in termos_compostos.items()}
+        restored_words = []
+        for w in stemmed_words:
+            if w in placeholders_reversos:
+                restored_words.append(placeholders_reversos[w])
+            else:
+                restored_words.append(w)
+
+        if restored_words:
+            return " ".join(restored_words)
 
         return None
+
+    def extract_category_terms(self, message: str) -> Optional[list]:
+        """
+        Detecta se a mensagem pergunta sobre múltiplas categorias.
+        Ex: "voce trabalha com doce e cafe?" → ["doce", "cafe"]
+        Ex: "tem azeite?" → None (single term, use normal search)
+        Ex: "doce de leite" → None (compound term, use normal search)
+        Ex: "queijo canastra" → None (product name, not categories)
+
+        Only triggers when the original message contains a separator
+        word ("e", "ou") between product/category terms.
+
+        Returns:
+            List of category terms if multi-category detected, None otherwise.
+        """
+        import re as _re
+        import string as _string
+
+        message_lower = message.lower().strip()
+
+        # Remover pontuação
+        message_clean = message_lower.translate(
+            str.maketrans('', '', _string.punctuation)
+        )
+
+        # Preservar compound terms — these should NOT be split
+        compostos = [
+            "doce de leite", "pão de queijo", "pao de queijo",
+            "mel de abelha", "azeite de oliva", "queijo de cabra",
+            "erva doce",
+        ]
+        for composto in compostos:
+            if composto in message_clean:
+                return None  # Compound term → not a category query
+
+        # Check if original message contains separator "e" or "ou" as standalone word
+        # between meaningful words (not inside compound terms)
+        has_separator = bool(_re.search(r'\b(e|ou)\b', message_clean))
+        if not has_separator:
+            return None  # No separator → single product search
+
+        # Extract the meaningful part after stop-word removal
+        termo = self.extract_search_term(message)
+        if not termo:
+            return None
+
+        # Check if there are 2+ remaining words (potential multi-category)
+        palavras = termo.strip().split()
+        if len(palavras) < 2:
+            return None  # Single word → normal search
+
+        # Return the list of category terms
+        return palavras
 
     def extract_product_number(self, message: str) -> Optional[int]:
         """
