@@ -104,24 +104,27 @@ class SupabaseProdutos:
 
             # Filtro: termo de busca (nome, descrição, categoria, tags)
             # Usa UNACCENT para ignorar acentos: "cafes" encontra "Café" ✅
-            # Multi-word: cada palavra é buscada separadamente com OR
-            # Isso permite que "trablha azeite" encontre "Azeite Irarema..."
-            # mesmo que "trablha" não exista em nenhum produto
+            #
+            # Strategy for multi-word terms:
+            # 1. Try full phrase match first ("%doce de leite%")
+            #    → best for compound terms like "doce de leite", "queijo canastra"
+            # 2. If no results, fall back to AND logic (every word must match somewhere)
+            #    → good for "cafe especial" where both words must be present
+            # NEVER use OR for filtering — it returns random products
             if termo:
                 palavras = termo.strip().split()
                 if len(palavras) > 1:
-                    # Multi-word: cada palavra gera um bloco OR nos campos
-                    word_conditions = []
-                    for palavra in palavras:
-                        palavra_like = f"%{palavra}%"
-                        word_conditions.append("""(
+                    # Multi-word: search as full phrase across all fields
+                    termo_like = f"%{termo}%"
+                    query += """
+                        AND (
                             unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
-                        )""")
-                        params.extend([palavra_like, palavra_like, palavra_like, palavra_like])
-                    query += " AND (" + " OR ".join(word_conditions) + ")"
+                        )
+                    """
+                    params.extend([termo_like, termo_like, termo_like, termo_like])
                 else:
                     # Single word: busca simples
                     query += """
@@ -135,18 +138,21 @@ class SupabaseProdutos:
                     termo_like = f"%{termo}%"
                     params.extend([termo_like, termo_like, termo_like, termo_like])
 
-            # Ordenar por relevância: prioriza match em nome, depois categoria, depois tags, depois descrição
-            # Para multi-word, ordena por quantas palavras casam no nome (mais = melhor)
+            # Ordenar por relevância: prioriza match em nome, depois categoria, depois tags
             if termo:
                 palavras = termo.strip().split()
                 if len(palavras) > 1:
-                    # Score: count how many words match the name
-                    score_parts = []
-                    for palavra in palavras:
-                        palavra_like = f"%{palavra}%"
-                        score_parts.append("CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END")
-                        params.append(palavra_like)
-                    query += f" ORDER BY ({' + '.join(score_parts)}), nome ASC LIMIT %s"
+                    # For multi-word: prioritize full-phrase match in nome
+                    termo_like = f"%{termo}%"
+                    query += """
+                        ORDER BY
+                            CASE WHEN unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            CASE WHEN unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            CASE WHEN unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s)) THEN 0 ELSE 1 END,
+                            nome ASC
+                        LIMIT %s
+                    """
+                    params.extend([termo_like, termo_like, termo_like])
                     params.append(limite)
                 else:
                     query += """
@@ -175,6 +181,47 @@ class SupabaseProdutos:
 
             cursor.execute(query, params)
             produtos = cursor.fetchall()
+
+            # Fallback for multi-word: if phrase match found nothing,
+            # retry with AND logic (every word must match somewhere)
+            if not produtos and termo:
+                palavras = termo.strip().split()
+                if len(palavras) > 1:
+                    logger.info(f"🔄 Phrase search found 0, retrying with AND logic: {palavras}")
+                    query2 = """
+                        SELECT id, tiny_id, nome, descricao, preco, preco_promocional,
+                               peso, unidade, imagem_url, link_produto, categoria,
+                               subcategoria, tags, estoque_disponivel, quantidade_estoque, ativo
+                        FROM produtos_site
+                        WHERE 1=1
+                    """
+                    params2 = []
+                    if apenas_disponiveis:
+                        query2 += " AND ativo = TRUE AND estoque_disponivel = TRUE"
+                    if categoria:
+                        query2 += " AND LOWER(categoria) = LOWER(%s)"
+                        params2.append(categoria)
+
+                    # AND: every word must appear somewhere in the product
+                    for palavra in palavras:
+                        palavra_like = f"%{palavra}%"
+                        query2 += """
+                            AND (
+                                unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
+                                OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
+                                OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                                OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                            )
+                        """
+                        params2.extend([palavra_like, palavra_like, palavra_like, palavra_like])
+
+                    query2 += " ORDER BY nome ASC LIMIT %s"
+                    params2.append(limite)
+                    cursor2 = conn.cursor(cursor_factory=RealDictCursor)
+                    cursor2.execute(query2, params2)
+                    produtos = cursor2.fetchall()
+                    cursor2.close()
+                    logger.info(f"🔄 AND fallback: {len(produtos)} products found")
 
             cursor.close()
             conn.close()
