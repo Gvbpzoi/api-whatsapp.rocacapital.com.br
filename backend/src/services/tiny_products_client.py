@@ -101,131 +101,200 @@ class TinyProductsClient:
             "Content-Type": "application/json"
         }
 
-    async def obter_produto(self, produto_id: str) -> Optional[Dict]:
+    def _extrair_erro(self, data: Dict) -> str:
+        """Extrai mensagem de erro da resposta da API Tiny v2"""
+        retorno = data.get("retorno", {})
+        # Tentar campo 'erro' (string)
+        erro = retorno.get("erro")
+        if erro:
+            return str(erro)
+        # Tentar campo 'erros' (array)
+        erros = retorno.get("erros", [])
+        if erros:
+            msgs = []
+            for e in erros:
+                if isinstance(e, dict):
+                    msgs.append(e.get("erro", str(e)))
+                else:
+                    msgs.append(str(e))
+            return " | ".join(msgs)
+        return f"status={retorno.get('status')}, codigo={retorno.get('codigo_erro')}"
+
+    async def _chamar_api_com_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        data: Dict,
+        max_tentativas: int = 3
+    ) -> Optional[Dict]:
+        """
+        Chama API do Tiny com retry e backoff para rate limiting
+
+        Args:
+            client: httpx client
+            url: URL do endpoint
+            data: Dados do POST
+            max_tentativas: Numero maximo de tentativas
+
+        Returns:
+            JSON da resposta ou None se falhou
+        """
+        for tentativa in range(max_tentativas):
+            try:
+                response = await client.post(url, data=data)
+
+                if response.status_code != 200:
+                    logger.error(f"HTTP {response.status_code} em {url}")
+                    return None
+
+                result = response.json()
+                retorno = result.get("retorno", {})
+
+                # Rate limiting (codigo_erro 6)
+                codigo_erro = retorno.get("codigo_erro")
+                if codigo_erro == 6:
+                    wait = (tentativa + 1) * 5  # 5s, 10s, 15s
+                    logger.warning(
+                        f"Rate limit atingido (tentativa {tentativa + 1}/{max_tentativas}), "
+                        f"aguardando {wait}s..."
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+
+                return result
+
+            except Exception as e:
+                logger.error(f"Excecao em {url}: {e}")
+                if tentativa < max_tentativas - 1:
+                    await asyncio.sleep(2)
+                    continue
+                return None
+
+        return None
+
+    async def obter_produto(self, produto_id: str, client: Optional[httpx.AsyncClient] = None) -> Optional[Dict]:
         """
         Obtém detalhes completos de um produto (incluindo observacoes)
 
         Args:
             produto_id: ID do produto no Tiny
+            client: httpx client reutilizavel (opcional)
 
         Returns:
             Dados completos do produto ou None se erro
         """
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.BASE_URL}/produto.obter.php",
-                    data={
-                        "token": self.token,
-                        "id": produto_id,
-                        "formato": "JSON"
-                    }
-                )
+        async def _fetch(c: httpx.AsyncClient):
+            data = await self._chamar_api_com_retry(
+                c,
+                f"{self.BASE_URL}/produto.obter.php",
+                {"token": self.token, "id": produto_id, "formato": "JSON"}
+            )
 
-                if response.status_code != 200:
-                    logger.error(f"❌ Erro ao obter produto {produto_id}: {response.status_code}")
-                    return None
+            if not data:
+                return None
 
-                data = response.json()
+            retorno = data.get("retorno", {})
+            if retorno.get("status") == "OK":
+                return retorno.get("produto", {})
+            else:
+                erro = self._extrair_erro(data)
+                logger.debug(f"Produto {produto_id} indisponivel: {erro}")
+                return None
 
-                if data.get("retorno", {}).get("status") == "OK":
-                    return data.get("retorno", {}).get("produto", {})
-                else:
-                    logger.error(f"❌ Erro Tiny produto {produto_id}: {data.get('retorno', {}).get('erro')}")
-                    return None
+        if client:
+            return await _fetch(client)
+        else:
+            async with httpx.AsyncClient(timeout=30.0) as c:
+                return await _fetch(c)
 
-        except Exception as e:
-            logger.error(f"❌ Exceção ao obter produto {produto_id}: {e}")
-            return None
-
-    async def obter_estoque(self, produto_id: str) -> Optional[float]:
+    async def obter_estoque(self, produto_id: str, client: Optional[httpx.AsyncClient] = None) -> Optional[float]:
         """
         Obtém estoque de um produto usando endpoint específico
 
-        Endpoint: /produto.obter.estoque.php
-        Retorna apenas o saldo (estoque atual) do produto
-
         Args:
             produto_id: ID do produto no Tiny
+            client: httpx client reutilizavel (opcional)
 
         Returns:
             Saldo (estoque) como float ou None se erro
         """
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.BASE_URL}/produto.obter.estoque.php",
-                    data={
-                        "token": self.token,
-                        "id": produto_id,
-                        "formato": "JSON"
-                    }
-                )
+        async def _fetch(c: httpx.AsyncClient):
+            data = await self._chamar_api_com_retry(
+                c,
+                f"{self.BASE_URL}/produto.obter.estoque.php",
+                {"token": self.token, "id": produto_id, "formato": "JSON"}
+            )
 
-                if response.status_code != 200:
-                    logger.error(f"❌ Erro ao obter estoque produto {produto_id}: {response.status_code}")
-                    return None
+            if not data:
+                return None
 
-                data = response.json()
-
-                if data.get("retorno", {}).get("status") == "OK":
-                    produto = data.get("retorno", {}).get("produto", {})
-
-                    # Tentar campo "saldo" (mais comum) ou "estoque"
-                    saldo = produto.get("saldo") or produto.get("estoque")
-
-                    if saldo is not None:
-                        # Usar método existente para converter
-                        return self._converter_estoque({"saldo": saldo})
-                    else:
-                        logger.warning(f"⚠️ Produto {produto_id} não tem campo saldo/estoque")
-                        return 0.0
+            retorno = data.get("retorno", {})
+            if retorno.get("status") == "OK":
+                produto = retorno.get("produto", {})
+                saldo = produto.get("saldo") or produto.get("estoque")
+                if saldo is not None:
+                    return self._converter_estoque({"saldo": saldo})
                 else:
-                    logger.error(f"❌ Erro Tiny estoque {produto_id}: {data.get('retorno', {}).get('erro')}")
-                    return None
+                    return 0.0
+            else:
+                erro = self._extrair_erro(data)
+                logger.debug(f"Estoque {produto_id} indisponivel: {erro}")
+                return None
 
-        except Exception as e:
-            logger.error(f"❌ Exceção ao obter estoque {produto_id}: {e}")
-            return None
+        if client:
+            return await _fetch(client)
+        else:
+            async with httpx.AsyncClient(timeout=30.0) as c:
+                return await _fetch(c)
 
-    async def obter_produto_completo(self, produto_id: str) -> Optional[Dict]:
+    async def obter_produto_completo(
+        self,
+        produto_id: str,
+        client: Optional[httpx.AsyncClient] = None
+    ) -> Optional[Dict]:
         """
         Obtém produto completo COM estoque
 
-        Faz 2 chamadas em paralelo:
-        1. produto.obter.php - Detalhes do produto
-        2. produto.obter.estoque.php - Estoque atual
+        Busca detalhes e estoque sequencialmente (evita rate limiting)
 
         Args:
             produto_id: ID do produto no Tiny
+            client: httpx client reutilizavel (opcional)
 
         Returns:
             Dicionário com dados do produto + estoque atualizado
         """
-        # Buscar produto e estoque em paralelo
-        produto_task = self.obter_produto(produto_id)
-        estoque_task = self.obter_estoque(produto_id)
+        async def _fetch(c: httpx.AsyncClient):
+            # Buscar detalhes primeiro
+            produto = await self.obter_produto(produto_id, client=c)
 
-        produto, estoque = await asyncio.gather(produto_task, estoque_task)
+            if not produto:
+                return None
 
-        if not produto:
-            return None
+            # Delay entre chamadas (usa metade do rate limit: 60 req/min = 1s entre chamadas)
+            await asyncio.sleep(1.0)
 
-        # Adicionar estoque ao produto
-        if estoque is not None:
-            produto["saldo"] = estoque
-            produto["estoque"] = estoque
-            logger.debug(f"✅ Produto {produto_id} com estoque: {estoque}")
+            # Buscar estoque
+            estoque = await self.obter_estoque(produto_id, client=c)
+
+            if estoque is not None:
+                produto["saldo"] = estoque
+                produto["estoque"] = estoque
+            else:
+                produto["saldo"] = 0
+                produto["estoque"] = 0
+
+            return produto
+
+        if client:
+            return await _fetch(client)
         else:
-            produto["saldo"] = 0
-            produto["estoque"] = 0
-            logger.warning(f"⚠️ Produto {produto_id} sem estoque disponível")
-
-        return produto
+            async with httpx.AsyncClient(timeout=30.0) as c:
+                return await _fetch(c)
 
     async def _buscar_pagina(self, client: httpx.AsyncClient, pagina: int) -> List[Dict]:
         """
-        Busca uma pagina de produtos da API Tiny
+        Busca uma pagina de produtos da API Tiny (com retry)
 
         Args:
             client: httpx client reutilizavel
@@ -234,28 +303,22 @@ class TinyProductsClient:
         Returns:
             Lista de produtos raw da pagina, ou lista vazia se nao ha mais
         """
-        response = await client.post(
+        data = await self._chamar_api_com_retry(
+            client,
             f"{self.BASE_URL}/produtos.pesquisa.php",
-            data={
-                "token": self.token,
-                "formato": "JSON",
-                "pagina": str(pagina)
-            }
+            {"token": self.token, "formato": "JSON", "pagina": str(pagina)}
         )
 
-        if response.status_code != 200:
-            logger.error(f"Erro na API Tiny pagina {pagina}: {response.status_code}")
+        if not data:
             return []
-
-        data = response.json()
 
         retorno = data.get("retorno", {})
         status = retorno.get("status")
 
         if status != "OK":
-            erro = retorno.get("erro", "")
+            erro = self._extrair_erro(data)
             # "Nao existem registros" = acabaram as paginas
-            if "registros" in str(erro).lower() or "nao" in str(erro).lower():
+            if "registro" in erro.lower() or "nao ha" in erro.lower():
                 logger.info(f"Pagina {pagina}: sem mais registros")
                 return []
             logger.error(f"Erro Tiny pagina {pagina}: {erro}")
@@ -271,7 +334,7 @@ class TinyProductsClient:
         self,
         limite: int = 0,
         filtrar_site: bool = True,
-        delay_entre_detalhes: float = 0.1
+        delay_entre_detalhes: float = 1.0
     ) -> List[Dict]:
         """
         Lista produtos do Tiny ERP com paginacao automatica
@@ -306,8 +369,8 @@ class TinyProductsClient:
                 # Buscar paginas restantes
                 pagina = 2
                 while True:
-                    # Rate limiting entre paginas
-                    await asyncio.sleep(0.3)
+                    # Rate limiting entre paginas (usa metade do rate limit: 60 req/min)
+                    await asyncio.sleep(1.0)
 
                     produtos_pagina = await self._buscar_pagina(client, pagina)
 
@@ -330,43 +393,52 @@ class TinyProductsClient:
                 todos_produtos_raw = todos_produtos_raw[:limite]
 
             # Processar cada produto (buscar detalhes + estoque)
+            # Reutiliza httpx client para todas as chamadas
             produtos_processados = []
             ignorados = 0
+            erros_api = 0
 
-            for idx, item in enumerate(todos_produtos_raw, 1):
-                produto_resumo = item.get("produto", {})
-                produto_id = produto_resumo.get("id")
+            async with httpx.AsyncClient(timeout=30.0) as detail_client:
+                for idx, item in enumerate(todos_produtos_raw, 1):
+                    produto_resumo = item.get("produto", {})
+                    produto_id = produto_resumo.get("id")
+                    produto_nome = produto_resumo.get("descricao", produto_resumo.get("nome", "?"))
 
-                if not produto_id:
-                    ignorados += 1
-                    continue
-
-                # Log de progresso a cada 20 produtos
-                if idx % 20 == 0 or idx == 1:
-                    logger.info(f"Processando detalhes {idx}/{len(todos_produtos_raw)}...")
-
-                # Buscar detalhes completos (com observacoes + estoque)
-                produto_completo = await self.obter_produto_completo(produto_id)
-
-                if not produto_completo:
-                    ignorados += 1
-                    continue
-
-                if filtrar_site:
-                    if await self._eh_produto_site_async(produto_completo):
-                        produtos_processados.append(self._normalizar_produto(produto_completo))
-                    else:
+                    if not produto_id:
                         ignorados += 1
-                else:
-                    produtos_processados.append(self._normalizar_produto(produto_completo))
+                        continue
 
-                # Rate limiting entre chamadas de detalhe
-                if delay_entre_detalhes > 0:
-                    await asyncio.sleep(delay_entre_detalhes)
+                    # Log de progresso a cada 50 produtos
+                    if idx % 50 == 0 or idx == 1:
+                        logger.info(
+                            f"Processando {idx}/{len(todos_produtos_raw)} "
+                            f"({len(produtos_processados)} ok, {erros_api} erros)..."
+                        )
+
+                    # Buscar detalhes completos (com observacoes + estoque)
+                    produto_completo = await self.obter_produto_completo(
+                        produto_id, client=detail_client
+                    )
+
+                    if not produto_completo:
+                        erros_api += 1
+                        continue
+
+                    if filtrar_site:
+                        if await self._eh_produto_site_async(produto_completo):
+                            produtos_processados.append(self._normalizar_produto(produto_completo))
+                        else:
+                            ignorados += 1
+                    else:
+                        produtos_processados.append(self._normalizar_produto(produto_completo))
+
+                    # Rate limiting entre chamadas de detalhe
+                    if delay_entre_detalhes > 0:
+                        await asyncio.sleep(delay_entre_detalhes)
 
             logger.info(
                 f"Sincronizacao concluida: {len(produtos_processados)} produtos processados, "
-                f"{ignorados} ignorados de {total_raw} total"
+                f"{ignorados} sem filtro 'site', {erros_api} erros API, de {total_raw} total"
             )
 
             return produtos_processados
