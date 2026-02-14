@@ -75,9 +75,11 @@ class ToolExecutor:
 
     async def _buscar_produtos(self, args: Dict, telefone: str) -> Dict:
         termo = args.get("termo", "")
-        limite = args.get("limite", 10)
+        limite = args.get("limite", 20)
 
         produtos = self.produtos_service.buscar_produtos(termo=termo, limite=limite)
+
+        logger.info(f"Busca '{termo}': {len(produtos)} produtos encontrados")
 
         if not produtos:
             return {"produtos": [], "total": 0, "mensagem": f"Nenhum produto encontrado para '{termo}'"}

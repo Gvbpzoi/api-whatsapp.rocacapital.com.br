@@ -99,12 +99,15 @@ async def sincronizar_produtos(
 
     # Configurar cliente para buscar TODOS ou filtrar
     if sync_all:
-        logger.info("🔍 Buscando TODOS os produtos do Tiny (sem filtro)...")
-        # Aqui você precisará modificar o client para não filtrar por 'site'
-        produtos = await tiny_client.listar_produtos(limite=batch_size, filtrar_site=False)
+        logger.info("🔍 Buscando TODOS os produtos do Tiny (sem filtro, com paginacao)...")
+        produtos = await tiny_client.listar_produtos(
+            limite=0, filtrar_site=False, delay_entre_detalhes=delay
+        )
     else:
         logger.info("🔍 Buscando apenas produtos com 'site' nas observações...")
-        produtos = await tiny_client.listar_produtos(limite=batch_size, filtrar_site=True)
+        produtos = await tiny_client.listar_produtos(
+            limite=0, filtrar_site=True, delay_entre_detalhes=delay
+        )
 
     if not produtos:
         logger.warning("⚠️ Nenhum produto encontrado no Tiny")

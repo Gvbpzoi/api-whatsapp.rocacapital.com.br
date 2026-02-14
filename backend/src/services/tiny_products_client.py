@@ -9,6 +9,7 @@ Responsável por:
 """
 
 import os
+import asyncio
 import httpx
 from typing import Dict, List, Optional
 from loguru import logger
@@ -201,8 +202,6 @@ class TinyProductsClient:
         Returns:
             Dicionário com dados do produto + estoque atualizado
         """
-        import asyncio
-
         # Buscar produto e estoque em paralelo
         produto_task = self.obter_produto(produto_id)
         estoque_task = self.obter_estoque(produto_id)
@@ -224,100 +223,156 @@ class TinyProductsClient:
 
         return produto
 
-    async def listar_produtos(self, limite: int = 50, filtrar_site: bool = True) -> List[Dict]:
+    async def _buscar_pagina(self, client: httpx.AsyncClient, pagina: int) -> List[Dict]:
         """
-        Lista produtos do Tiny ERP
+        Busca uma pagina de produtos da API Tiny
 
         Args:
-            limite: Número máximo de produtos a buscar
-            filtrar_site: Se True, filtra apenas produtos com "site" nas obs
+            client: httpx client reutilizavel
+            pagina: Numero da pagina (1-based)
 
         Returns:
-            Lista de produtos (filtrados ou todos, dependendo do parâmetro)
+            Lista de produtos raw da pagina, ou lista vazia se nao ha mais
         """
-        if filtrar_site:
-            logger.info("🔍 Buscando produtos do Tiny ERP (apenas com 'site')...")
-        else:
-            logger.info("🔍 Buscando TODOS os produtos do Tiny ERP (sem filtro)...")
+        response = await client.post(
+            f"{self.BASE_URL}/produtos.pesquisa.php",
+            data={
+                "token": self.token,
+                "formato": "JSON",
+                "pagina": str(pagina)
+            }
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Erro na API Tiny pagina {pagina}: {response.status_code}")
+            return []
+
+        data = response.json()
+
+        retorno = data.get("retorno", {})
+        status = retorno.get("status")
+
+        if status != "OK":
+            erro = retorno.get("erro", "")
+            # "Nao existem registros" = acabaram as paginas
+            if "registros" in str(erro).lower() or "nao" in str(erro).lower():
+                logger.info(f"Pagina {pagina}: sem mais registros")
+                return []
+            logger.error(f"Erro Tiny pagina {pagina}: {erro}")
+            return []
+
+        produtos = retorno.get("produtos", [])
+        numero_paginas = retorno.get("numero_paginas", 1)
+
+        logger.info(f"Pagina {pagina}/{numero_paginas}: {len(produtos)} produtos")
+        return produtos
+
+    async def listar_produtos(
+        self,
+        limite: int = 0,
+        filtrar_site: bool = True,
+        delay_entre_detalhes: float = 0.1
+    ) -> List[Dict]:
+        """
+        Lista produtos do Tiny ERP com paginacao automatica
+
+        A API v2 do Tiny retorna no maximo 20 produtos por pagina.
+        Este metodo percorre todas as paginas automaticamente.
+
+        Args:
+            limite: Maximo de produtos (0 = todos)
+            filtrar_site: Se True, filtra apenas produtos com "site" nas obs
+            delay_entre_detalhes: Delay entre chamadas de detalhe (rate limiting)
+
+        Returns:
+            Lista de produtos normalizados
+        """
+        modo = "apenas com 'site'" if filtrar_site else "TODOS"
+        logger.info(f"Buscando produtos do Tiny ERP ({modo})...")
 
         try:
+            todos_produtos_raw = []
+
             async with httpx.AsyncClient(timeout=30.0) as client:
-                # API v2 do Tiny usa form-encoded, não JSON
-                # Token simples no body
-                response = await client.post(
-                    f"{self.BASE_URL}/produtos.pesquisa.php",
-                    data={
-                        "token": self.token,
-                        "formato": "JSON"
-                    }
-                )
+                # Buscar primeira pagina para saber total
+                primeira_pagina = await self._buscar_pagina(client, 1)
 
-                if response.status_code != 200:
-                    logger.error(f"❌ Erro na API Tiny: {response.status_code}")
-                    logger.error(f"❌ Response: {response.text[:500]}")
+                if not primeira_pagina:
+                    logger.warning("Nenhum produto encontrado no Tiny")
                     return []
 
-                data = response.json()
+                todos_produtos_raw.extend(primeira_pagina)
 
-                # Log da resposta completa para debug
-                logger.debug(f"📥 Resposta Tiny: {data}")
+                # Buscar paginas restantes
+                pagina = 2
+                while True:
+                    # Rate limiting entre paginas
+                    await asyncio.sleep(0.3)
 
-                if data.get("retorno", {}).get("status") != "OK":
-                    logger.error(f"❌ Status: {data.get('retorno', {}).get('status')}")
-                    logger.error(f"❌ Erro Tiny: {data.get('retorno', {}).get('erro')}")
-                    logger.error(f"❌ Resposta completa: {data}")
-                    return []
+                    produtos_pagina = await self._buscar_pagina(client, pagina)
 
-                produtos_raw = data.get("retorno", {}).get("produtos", [])
+                    if not produtos_pagina:
+                        break
 
-                # Processar produtos
-                produtos_processados = []
-                total = len(produtos_raw)
-                ignorados = 0
+                    todos_produtos_raw.extend(produtos_pagina)
+                    pagina += 1
 
-                logger.info(f"📦 Processando {min(len(produtos_raw), limite)} produtos...")
+                    # Safety: maximo 100 paginas (2000 produtos)
+                    if pagina > 100:
+                        logger.warning("Limite de 100 paginas atingido")
+                        break
 
-                for item in produtos_raw[:limite]:
-                    produto_resumo = item.get("produto", {})
-                    produto_id = produto_resumo.get("id")
+            total_raw = len(todos_produtos_raw)
+            logger.info(f"Total bruto: {total_raw} produtos em {pagina - 1} paginas")
 
-                    if not produto_id:
-                        logger.warning(f"⚠️ Produto sem ID: {produto_resumo.get('codigo')}")
-                        ignorados += 1
-                        continue
+            # Aplicar limite se especificado
+            if limite > 0:
+                todos_produtos_raw = todos_produtos_raw[:limite]
 
-                    # Buscar detalhes completos (com observacoes + estoque)
-                    produto_completo = await self.obter_produto_completo(produto_id)
+            # Processar cada produto (buscar detalhes + estoque)
+            produtos_processados = []
+            ignorados = 0
 
-                    if not produto_completo:
-                        ignorados += 1
-                        continue
+            for idx, item in enumerate(todos_produtos_raw, 1):
+                produto_resumo = item.get("produto", {})
+                produto_id = produto_resumo.get("id")
 
-                    # Se filtrar_site=True, verificar se tem "site" nas obs
-                    # Se filtrar_site=False, aceitar todos
-                    if filtrar_site:
-                        if await self._eh_produto_site_async(produto_completo):
-                            produtos_processados.append(self._normalizar_produto(produto_completo))
-                        else:
-                            ignorados += 1
-                    else:
-                        # Aceitar TODOS sem filtro
-                        produtos_processados.append(self._normalizar_produto(produto_completo))
+                if not produto_id:
+                    ignorados += 1
+                    continue
+
+                # Log de progresso a cada 20 produtos
+                if idx % 20 == 0 or idx == 1:
+                    logger.info(f"Processando detalhes {idx}/{len(todos_produtos_raw)}...")
+
+                # Buscar detalhes completos (com observacoes + estoque)
+                produto_completo = await self.obter_produto_completo(produto_id)
+
+                if not produto_completo:
+                    ignorados += 1
+                    continue
 
                 if filtrar_site:
-                    logger.info(
-                        f"✅ Sincronização concluída: {len(produtos_processados)} produtos do site, "
-                        f"{ignorados} ignorados de {total} total"
-                    )
+                    if await self._eh_produto_site_async(produto_completo):
+                        produtos_processados.append(self._normalizar_produto(produto_completo))
+                    else:
+                        ignorados += 1
                 else:
-                    logger.info(
-                        f"✅ Sincronização concluída: {len(produtos_processados)} produtos total"
-                    )
+                    produtos_processados.append(self._normalizar_produto(produto_completo))
 
-                return produtos_processados
+                # Rate limiting entre chamadas de detalhe
+                if delay_entre_detalhes > 0:
+                    await asyncio.sleep(delay_entre_detalhes)
+
+            logger.info(
+                f"Sincronizacao concluida: {len(produtos_processados)} produtos processados, "
+                f"{ignorados} ignorados de {total_raw} total"
+            )
+
+            return produtos_processados
 
         except Exception as e:
-            logger.error(f"❌ Erro ao buscar produtos: {e}")
+            logger.error(f"Erro ao buscar produtos: {e}")
             return []
 
     async def _eh_produto_site_async(self, produto: Dict) -> bool:

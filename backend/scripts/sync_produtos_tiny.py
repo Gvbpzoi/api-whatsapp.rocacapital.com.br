@@ -73,7 +73,7 @@ async def sincronizar_produtos():
 
     # Buscar produtos do Tiny
     tiny_client = get_tiny_products_client()
-    produtos = await tiny_client.listar_produtos(limite=50)
+    produtos = await tiny_client.listar_produtos(limite=0, delay_entre_detalhes=0.3)
 
     if not produtos:
         logger.warning("⚠️ Nenhum produto encontrado no Tiny")
