@@ -13,6 +13,7 @@ from ..models.session import MessageSource, SessionMode
 from ..orchestrator.gotcha_engine import GOTCHAEngine
 from ..orchestrator.intent_classifier import IntentClassifier
 from ..orchestrator.tools_helper import ToolsHelper
+from ..orchestrator.response_evaluator import ResponseEvaluator
 from . import zapi_webhook
 
 
@@ -420,7 +421,7 @@ async def _process_with_agent(phone: str, message: str) -> str:
 @app.on_event("startup")
 async def startup_event():
     """Inicialização da aplicação"""
-    global gotcha_engine, intent_classifier, tools_helper
+    global gotcha_engine, intent_classifier, tools_helper, response_evaluator
 
     logger.info("🚀 Iniciando Agente WhatsApp API...")
     logger.info("📊 SessionManager inicializado")
@@ -449,11 +450,20 @@ async def startup_event():
         logger.error(f"❌ Erro ao inicializar Tools Helper: {e}")
         tools_helper = None
 
+    # Inicializar Response Evaluator
+    try:
+        response_evaluator = ResponseEvaluator()
+        logger.info("Response Evaluator inicializado")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar Response Evaluator: {e}")
+        response_evaluator = None
+
     # Injetar singletons no router ZAPI
     zapi_webhook.session_manager = session_manager
     zapi_webhook.gotcha_engine = gotcha_engine
     zapi_webhook.intent_classifier = intent_classifier
     zapi_webhook.tools_helper = tools_helper
+    zapi_webhook.response_evaluator = response_evaluator
 
     # Inicializar ZAPI Client
     try:

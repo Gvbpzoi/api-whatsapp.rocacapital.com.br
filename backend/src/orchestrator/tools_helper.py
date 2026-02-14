@@ -349,6 +349,115 @@ class ToolsHelper:
             logger.error(f"❌ Erro ao adicionar por termo: {e}")
             return {"status": "error", "message": str(e)}
 
+    def remover_item(self, telefone: str, produto_id: str) -> Dict[str, Any]:
+        """
+        Remove item do carrinho.
+
+        Args:
+            telefone: Telefone do cliente
+            produto_id: ID do produto a remover
+
+        Returns:
+            Dict com resultado
+        """
+        try:
+            logger.info(f"🗑️ Removendo produto {produto_id} do carrinho de {telefone}")
+
+            if self.use_persistent_cart:
+                success = self.carrinho_service.remover_item(telefone, produto_id)
+                if not success:
+                    return {"status": "error", "message": "Erro ao remover item"}
+                carrinho = self.carrinho_service.obter_carrinho(telefone)
+            else:
+                carrinho = self.carrinhos.get(telefone, [])
+                item_encontrado = None
+                for item in carrinho:
+                    if str(item["produto_id"]) == str(produto_id):
+                        item_encontrado = item
+                        break
+                if not item_encontrado:
+                    return {"status": "error", "message": "Item não encontrado no carrinho"}
+                carrinho = [item for item in carrinho if str(item["produto_id"]) != str(produto_id)]
+                self.carrinhos[telefone] = carrinho
+
+            return {
+                "status": "success",
+                "carrinho": carrinho,
+                "total_itens": len(carrinho),
+                "quantidade_total": sum(item.get("quantidade", 0) for item in carrinho),
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao remover item: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def alterar_quantidade(self, telefone: str, produto_id: str, nova_quantidade: int) -> Dict[str, Any]:
+        """
+        Altera a quantidade de um item no carrinho.
+
+        Args:
+            telefone: Telefone do cliente
+            produto_id: ID do produto
+            nova_quantidade: Nova quantidade desejada
+
+        Returns:
+            Dict com resultado
+        """
+        try:
+            logger.info(f"✏️ Alterando quantidade de {produto_id} para {nova_quantidade}")
+
+            if nova_quantidade <= 0:
+                return self.remover_item(telefone, produto_id)
+
+            if self.use_persistent_cart:
+                success = self.carrinho_service.atualizar_quantidade(telefone, produto_id, nova_quantidade)
+                if not success:
+                    return {"status": "error", "message": "Erro ao alterar quantidade"}
+                carrinho = self.carrinho_service.obter_carrinho(telefone)
+            else:
+                carrinho = self.carrinhos.get(telefone, [])
+                item_encontrado = None
+                for item in carrinho:
+                    if str(item["produto_id"]) == str(produto_id):
+                        item_encontrado = item
+                        break
+                if not item_encontrado:
+                    return {"status": "error", "message": "Item não encontrado no carrinho"}
+                item_encontrado["quantidade"] = nova_quantidade
+                item_encontrado["subtotal"] = item_encontrado["preco_unitario"] * nova_quantidade
+
+            return {
+                "status": "success",
+                "carrinho": carrinho,
+                "total_itens": len(carrinho),
+                "quantidade_total": sum(item.get("quantidade", 0) for item in carrinho),
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao alterar quantidade: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def limpar_carrinho(self, telefone: str) -> Dict[str, Any]:
+        """
+        Limpa todos os itens do carrinho.
+
+        Args:
+            telefone: Telefone do cliente
+
+        Returns:
+            Dict com resultado
+        """
+        try:
+            logger.info(f"🗑️ Limpando carrinho de {telefone[:8]}")
+            if self.use_persistent_cart:
+                self.carrinho_service.limpar_carrinho(telefone)
+            else:
+                self.carrinhos.pop(telefone, None)
+            return {"status": "success"}
+        except Exception as e:
+            logger.error(f"❌ Erro ao limpar carrinho: {e}")
+            return {"status": "error", "message": str(e)}
+
     def ver_carrinho(self, telefone: str) -> Dict[str, Any]:
         """
         Visualiza carrinho do cliente (PERSISTENTE).

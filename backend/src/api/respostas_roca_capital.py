@@ -261,6 +261,24 @@ Você tá procurando algo específico? Me fala o que te interessa que eu te ajud
 Ou se preferir ver tudo, dá uma olhada aqui: https://rocacapital.com.br/collections"""
 
 
+def formatar_item_removido(produto_nome: str, carrinho_vazio: bool = False) -> str:
+    """Formata resposta de item removido do carrinho."""
+    if carrinho_vazio:
+        return f"""Pronto, tirei o *{produto_nome}* do carrinho.
+
+Seu carrinho ficou vazio. Quer ver mais algum produto?"""
+    return f"""Pronto, tirei o *{produto_nome}* do carrinho.
+
+Quer ver como ficou o carrinho ou precisa de mais alguma coisa?"""
+
+
+def formatar_quantidade_alterada(produto_nome: str, nova_quantidade: int) -> str:
+    """Formata resposta de quantidade alterada."""
+    return f"""Beleza, alterei a quantidade de *{produto_nome}* para {nova_quantidade} {"unidade" if nova_quantidade == 1 else "unidades"}.
+
+Quer ver o carrinho atualizado?"""
+
+
 def formatar_estoque_insuficiente(produto_nome: str, quantidade_solicitada: int, quantidade_disponivel: int) -> str:
     """
     Formata resposta humanizada para estoque insuficiente.
