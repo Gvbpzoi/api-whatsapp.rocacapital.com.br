@@ -1,15 +1,10 @@
-name: Deploy to Hostinger/EasyPanel
+name: Deploy to EasyPanel
 
 on:
   push:
     branches:
       - main
-      - production
   workflow_dispatch:  # Permite trigger manual
-
-env:
-  DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  IMAGE_NAME: agente-whatsapp
 
 jobs:
   # Job 1: Build e Push da imagem Docker
@@ -56,59 +51,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Job 2: Deploy no Hostinger via SSH
+  # Job 2: Trigger deploy no EasyPanel via Webhook
   deploy:
-    name: Deploy to Hostinger
+    name: Deploy via EasyPanel Webhook
     runs-on: ubuntu-latest
     needs: build
 
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
-
     steps:
-      - name: Verificar secrets SSH configurados
+      - name: Verificar webhook configurado
         run: |
-          if [ -z "${{ secrets.HOSTINGER_HOST }}" ]; then
-            echo "::error::Secret HOSTINGER_HOST não configurado. Configure em Settings > Secrets > Actions."
+          if [ -z "${{ secrets.EASYPANEL_WEBHOOK_URL }}" ]; then
+            echo "::error::Secret EASYPANEL_WEBHOOK_URL não configurado."
+            echo "::error::Configure em Settings > Secrets > Actions com a URL do webhook do EasyPanel."
             exit 1
           fi
-          if [ -z "${{ secrets.HOSTINGER_SSH_KEY }}" ]; then
-            echo "::error::Secret HOSTINGER_SSH_KEY não configurado. Configure em Settings > Secrets > Actions."
+          echo "Webhook EasyPanel configurado."
+
+      - name: Trigger deploy no EasyPanel
+        run: |
+          HTTP_STATUS=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST "${{ secrets.EASYPANEL_WEBHOOK_URL }}")
+
+          echo "HTTP Status: $HTTP_STATUS"
+          cat /tmp/response.txt
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::Webhook EasyPanel retornou status $HTTP_STATUS"
             exit 1
           fi
-          echo "Secrets SSH verificados."
 
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.HOSTINGER_HOST }}
-          username: ${{ secrets.HOSTINGER_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: ${{ secrets.HOSTINGER_PORT }}
-          script_stop: true
-          command_timeout: 5m
-          script: |
-            set -e
-
-            cd /var/www/agente-whatsapp
-
-            # Pull código atualizado
-            git pull origin main
-
-            # Pull nova imagem Docker
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            docker pull ghcr.io/${{ github.repository_owner }}/agente-whatsapp:latest
-
-            # Restart serviços
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml up -d
-
-            # Limpar imagens antigas
-            docker image prune -af
-
-            echo "Deploy concluído com sucesso!"
+          echo "Deploy triggered com sucesso no EasyPanel!"
 
   # Job 3: Health Check pós-deploy
   health-check:
@@ -117,23 +89,28 @@ jobs:
     needs: deploy
 
     steps:
-      - name: Aguardar 30s para serviço iniciar
-        run: sleep 30
+      - name: Aguardar 60s para EasyPanel fazer o deploy
+        run: sleep 60
 
       - name: Verificar API está online
         run: |
-          curl -sf --retry 3 --retry-delay 10 \
-            https://${{ secrets.API_DOMAIN || 'api-whatsapp.rocacapital.com.br' }}/ \
-            -o /dev/null -w "HTTP %{http_code}" || {
-            echo "::warning::Health check falhou. Verifique se o serviço está rodando."
+          API_URL="https://${API_DOMAIN:-api-whatsapp.rocacapital.com.br}"
+          echo "Verificando: $API_URL"
+
+          curl -sf --retry 5 --retry-delay 10 \
+            "$API_URL/" \
+            -o /dev/null -w "HTTP %{http_code}\n" || {
+            echo "::warning::Health check falhou. Verifique o EasyPanel."
             exit 1
           }
           echo "API está online!"
+        env:
+          API_DOMAIN: ${{ secrets.API_DOMAIN }}
 
       - name: Notificar sucesso
         if: success()
-        run: echo "Deploy realizado com sucesso!"
+        run: echo "Deploy realizado com sucesso via EasyPanel!"
 
       - name: Notificar falha
         if: failure()
-        run: echo "::error::Deploy falhou! Verificar logs do container no servidor."
+        run: echo "::error::Deploy falhou! Verificar logs no EasyPanel."

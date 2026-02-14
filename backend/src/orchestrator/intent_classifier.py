@@ -232,14 +232,45 @@ class IntentClassifier:
             return word_lower[:-1]
         
         # Regra 6: palavras terminadas em "es"
-        # Se o caractere antes de "es" é vogal, o plural é apenas "s" (azeite→azeites)
-        # Se é consoante, o plural é "es" (flor→flores)
+        # Lógica: verificar se é consoante+"es" (plural por adição de "es")
+        # ou se é base_em_e+"s" (plural por adição de "s")
+        #
+        # Padrão consoante+"es": flores→flor, cores→cor, nozes→noz
+        #   Nesses casos, a penúltima letra (antes do "e" final) é consoante
+        #   e a palavra sem "es" é a raiz válida.
+        #
+        # Padrão base_em_e+"s": azeites→azeite, cafes→cafe, chocolates→chocolate
+        #   Nesses casos, a raiz é a palavra sem "s".
+        #
+        # Heurística: se o padrão é Consoante+Consoante+"es", remover "es"
+        #   (ex: "flores" = fl+or+es → [-4]=o(vogal), [-3]=r(consoante))
+        #   Se o padrão tem Vogal antes do "es" final, remover só "s"
+        #   (ex: "azeites" = azeit+es → [-4]=i(vogal), [-3]=t(consoante))
+        # Na prática, basta olhar se [-4] é consoante: se sim → remover "es"
         if word_lower.endswith("es") and len(word_lower) > 4:
-            char_before_es = word_lower[-3]
-            if char_before_es in "aeiouáéíóúâêîôû":
-                return word_lower[:-1]  # "azeites" → "azeite"
+            # Para palavras curtas terminadas em consoante+es (flores, cores, nozes)
+            # char[-3] = consoante E char[-4] = vogal → plural com "es"
+            # Para palavras com base em "e" (azeites, cafes, tomates, doces)
+            # o singular termina em "e", então tiramos só "s"
+            char_before_es = word_lower[-3]  # r em flores, t em azeites
+            if len(word_lower) >= 5:
+                char_two_before = word_lower[-4]  # o em flores, i em azeites
             else:
-                return word_lower[:-2]  # "flores" → "flor"
+                char_two_before = ""
+
+            vogais = "aeiouáéíóúâêîôû"
+
+            # Padrão: Vogal + Consoante + "es" → provavelmente base+"s"
+            # Ex: azeites (i+t+es), cafes (a+f+es), doces (o+c+es), leites (i+t+es)
+            # Padrão: Consoante + Consoante + "es" → remover "es"
+            # Ex: flores (l+r+es) → flor
+            # Exceção: quando char_before_es é "r","l","z","n" e char_two_before é vogal
+            #   → sempre remover "es" (flores→flor, cores→cor, nozes→noz)
+            if char_before_es not in vogais and char_before_es in "rlzns":
+                # Consoante típica de plural em "es": r,l,z,n,s
+                return word_lower[:-2]  # "flores" → "flor", "cores" → "cor"
+            else:
+                return word_lower[:-1]  # "azeites" → "azeite", "cafes" → "cafe"
         
         # Regra 7: palavras terminadas em "s" (mais comum) -> remover "s"
         if word_lower.endswith("s") and len(word_lower) > 3:
