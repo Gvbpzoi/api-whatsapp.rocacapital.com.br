@@ -477,60 +477,146 @@ def _handle_estoque_insuficiente(ctx: HandlerContext, result: dict) -> str:
         )
 
 
+def _extrair_multiplos_numeros(message: str) -> list:
+    """
+    Extract multiple item numbers from a message.
+    Ex: "quero tirar o 1 e o 2" → [1, 2]
+    Ex: "remove item 1, 2 e 3" → [1, 2, 3]
+    Ex: "somente o 1 e o 2" → [1, 2]
+    """
+    msg = message.lower()
+    numeros = []
+
+    # Match all digits in context of item selection
+    for match in re.finditer(r'\b(\d+)\b', msg):
+        num = int(match.group(1))
+        if 1 <= num <= 20:  # reasonable cart size
+            numeros.append(num)
+
+    # Also match written-out numbers
+    escritos = {
+        "primeiro": 1, "primeira": 1,
+        "segundo": 2, "segunda": 2,
+        "terceiro": 3, "terceira": 3,
+        "quarto": 4, "quarta": 4,
+        "quinto": 5, "quinta": 5,
+    }
+    for palavra, num in escritos.items():
+        if palavra in msg and num not in numeros:
+            numeros.append(num)
+
+    return sorted(set(numeros))
+
+
 def handle_remover_item(ctx: HandlerContext) -> str:
-    """Handle removing an item from the cart"""
+    """Handle removing item(s) from the cart.
+
+    IMPORTANT: Numbers always reference CART positions, not search results.
+    Supports removing multiple items at once ("remove 1 e 2").
+    """
     sm = ctx.session_manager
     ic = ctx.intent_classifier
     th = ctx.tools_helper
 
-    # Try to identify which product to remove
-    produto_alvo = None
-
-    # a) Product number mentioned
-    numero_produto = ic.extract_product_number(ctx.message)
-    if numero_produto:
-        # Number references last products shown, not cart items
-        produto_alvo = sm.get_product_by_number(ctx.phone, numero_produto)
-
-    # b) Search term in message
-    if not produto_alvo:
-        termo = ic.extract_search_term(ctx.message)
-        if termo and termo.strip():
-            # Check cart items for a match
-            carrinho = th.ver_carrinho(ctx.phone)
-            if carrinho["status"] == "success" and not carrinho.get("vazio"):
-                for item in carrinho["carrinho"]:
-                    if termo.lower() in item["nome"].lower():
-                        produto_alvo = item
-                        break
-
-    # c) Single item in cart → auto-select
-    if not produto_alvo:
-        carrinho = th.ver_carrinho(ctx.phone)
-        if carrinho["status"] == "success" and not carrinho.get("vazio"):
-            if len(carrinho["carrinho"]) == 1:
-                produto_alvo = carrinho["carrinho"][0]
-
-    if not produto_alvo:
-        carrinho = th.ver_carrinho(ctx.phone)
-        if carrinho["status"] == "success" and not carrinho.get("vazio"):
-            items_str = "\n".join(
-                f"{i+1}. {item['nome']}"
-                for i, item in enumerate(carrinho["carrinho"])
-            )
-            return f"Qual item você quer tirar do carrinho?\n\n{items_str}"
+    # Get current cart first
+    carrinho = th.ver_carrinho(ctx.phone)
+    if carrinho["status"] != "success" or carrinho.get("vazio"):
         return "Seu carrinho já está vazio."
 
-    produto_id = str(produto_alvo.get("produto_id", produto_alvo.get("id", "")))
-    produto_nome = produto_alvo.get("nome", produto_alvo.get("produto_nome", ""))
+    cart_items = carrinho["carrinho"]
 
-    result = th.remover_item(ctx.phone, produto_id)
+    # a) Extract numbers — they reference CART positions
+    numeros = _extrair_multiplos_numeros(ctx.message)
 
-    if result["status"] == "success":
-        carrinho_vazio = result.get("total_itens", 0) == 0
-        return resp.formatar_item_removido(produto_nome, carrinho_vazio)
+    if numeros:
+        items_para_remover = []
+        numeros_invalidos = []
 
-    return f"Ops! {result.get('message', 'Erro ao remover item')}"
+        for num in numeros:
+            if 1 <= num <= len(cart_items):
+                items_para_remover.append(cart_items[num - 1])
+            else:
+                numeros_invalidos.append(num)
+
+        if numeros_invalidos and not items_para_remover:
+            items_str = "\n".join(
+                f"{i+1}. {item['nome']}"
+                for i, item in enumerate(cart_items)
+            )
+            return (
+                f"Não encontrei esses itens no carrinho. "
+                f"Aqui estão os itens:\n\n{items_str}"
+            )
+
+        # Remove each item
+        nomes_removidos = []
+        for item in items_para_remover:
+            produto_id = str(item.get("produto_id", item.get("id", "")))
+            produto_nome = item.get("nome", item.get("produto_nome", ""))
+            result = th.remover_item(ctx.phone, produto_id)
+            if result["status"] == "success":
+                nomes_removidos.append(produto_nome)
+
+        if nomes_removidos:
+            carrinho_atualizado = th.ver_carrinho(ctx.phone)
+            carrinho_vazio = carrinho_atualizado.get("vazio", True)
+
+            if len(nomes_removidos) == 1:
+                return resp.formatar_item_removido(nomes_removidos[0], carrinho_vazio)
+
+            nomes_str = "\n".join(f"- {n}" for n in nomes_removidos)
+            if carrinho_vazio:
+                return (
+                    f"Pronto, tirei esses itens do carrinho:\n{nomes_str}\n\n"
+                    f"Seu carrinho ficou vazio. Quer procurar mais algum produto?"
+                )
+            return (
+                f"Pronto, tirei esses itens do carrinho:\n{nomes_str}\n\n"
+                f"Quer ver como ficou o carrinho ou precisa de mais alguma coisa?"
+            )
+
+        return "Ops, não consegui remover os itens. Tente novamente."
+
+    # b) Search term in message (e.g., "tira o azeite alho")
+    termo = ic.extract_search_term(ctx.message)
+    if termo and termo.strip():
+        items_match = [
+            item for item in cart_items
+            if termo.lower() in item["nome"].lower()
+        ]
+        if len(items_match) == 1:
+            produto_id = str(items_match[0].get("produto_id", items_match[0].get("id", "")))
+            produto_nome = items_match[0].get("nome", "")
+            result = th.remover_item(ctx.phone, produto_id)
+            if result["status"] == "success":
+                carrinho_vazio = result.get("total_itens", 0) == 0
+                return resp.formatar_item_removido(produto_nome, carrinho_vazio)
+            return f"Ops! {result.get('message', 'Erro ao remover item')}"
+        elif len(items_match) > 1:
+            items_str = "\n".join(
+                f"{i+1}. {item['nome']}"
+                for i, item in enumerate(items_match)
+            )
+            return (
+                f"Encontrei mais de um item com esse nome. "
+                f"Qual você quer tirar?\n\n{items_str}"
+            )
+
+    # c) Single item in cart → auto-select
+    if len(cart_items) == 1:
+        produto_id = str(cart_items[0].get("produto_id", cart_items[0].get("id", "")))
+        produto_nome = cart_items[0].get("nome", "")
+        result = th.remover_item(ctx.phone, produto_id)
+        if result["status"] == "success":
+            return resp.formatar_item_removido(produto_nome, True)
+        return f"Ops! {result.get('message', 'Erro ao remover item')}"
+
+    # d) Can't determine — list cart items for customer to choose
+    items_str = "\n".join(
+        f"{i+1}. {item['nome']}"
+        for i, item in enumerate(cart_items)
+    )
+    return f"Qual item você quer tirar do carrinho?\n\n{items_str}"
 
 
 def handle_alterar_quantidade(ctx: HandlerContext) -> str:
