@@ -92,6 +92,9 @@ class ChatHistoryManager:
 
                 messages.append(msg)
 
+            # Sanitizar: garantir que toda msg 'tool' tenha um 'assistant' com tool_calls antes
+            messages = self._sanitize_messages(messages)
+
             return messages
 
         except Exception as e:
@@ -99,6 +102,74 @@ class ChatHistoryManager:
             if conn:
                 conn.close()
             return []
+
+    @staticmethod
+    def _sanitize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Sanitiza mensagens para garantir formato valido para a OpenAI API.
+
+        Regras:
+        - Toda mensagem role='tool' DEVE ser precedida por um assistant com tool_calls
+        - Se uma tool msg esta orfa (sem assistant+tool_calls antes), remove ela
+        - Se um assistant com tool_calls nao tem tool responses depois, remove ele
+        """
+        if not messages:
+            return messages
+
+        # Coletar IDs de tool_calls existentes nos assistants
+        valid_tool_call_ids = set()
+        for msg in messages:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        valid_tool_call_ids.add(tc_id)
+
+        # Primeira passada: remover tool messages orfas
+        cleaned = []
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tool_call_id = msg.get("tool_call_id", "")
+                if tool_call_id in valid_tool_call_ids:
+                    cleaned.append(msg)
+                else:
+                    logger.warning(
+                        f"Removendo tool msg orfa (tool_call_id={tool_call_id})"
+                    )
+            else:
+                cleaned.append(msg)
+
+        # Segunda passada: verificar que assistant+tool_calls tem tool responses
+        # Coletar IDs de tool responses presentes
+        present_tool_ids = set()
+        for msg in cleaned:
+            if msg.get("role") == "tool":
+                present_tool_ids.add(msg.get("tool_call_id", ""))
+
+        final = []
+        for msg in cleaned:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                # Verificar se TODAS as tool_calls tem responses
+                all_ids = [tc.get("id", "") for tc in msg["tool_calls"]]
+                if all(tid in present_tool_ids for tid in all_ids):
+                    final.append(msg)
+                else:
+                    # Converter para assistant simples (sem tool_calls)
+                    logger.warning(
+                        f"Removendo tool_calls orfos de assistant msg"
+                    )
+                    if msg.get("content"):
+                        final.append({"role": "assistant", "content": msg["content"]})
+                    # Se nao tem content, simplesmente remove
+            else:
+                final.append(msg)
+
+        if len(final) != len(messages):
+            logger.info(
+                f"Historico sanitizado: {len(messages)} -> {len(final)} mensagens"
+            )
+
+        return final
 
     def save_message(
         self,
