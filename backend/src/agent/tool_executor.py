@@ -286,12 +286,31 @@ class ToolExecutor:
         if not endereco:
             return {"erro": "Endereco obrigatorio para calcular frete"}
 
-        # Simulação de frete baseada em localidade
+        # Detectar se é BH por palavras-chave ou CEP
         endereco_lower = endereco.lower()
-        eh_bh = any(
-            t in endereco_lower
-            for t in ["belo horizonte", "bh", "savassi", "lourdes", "funcionarios", "centro", "pampulha"]
-        )
+
+        # Bairros e cidades de BH / região metropolitana
+        bairros_bh = [
+            "belo horizonte", "bh", "savassi", "lourdes", "funcionarios",
+            "centro", "pampulha", "serra", "sion", "santa efigenia",
+            "gutierrez", "buritis", "belvedere", "mangabeiras", "anchieta",
+            "santo antonio", "carmo", "cidade nova", "floresta", "horto",
+            "santa tereza", "padre eustaquio", "carlos prates", "caiçara",
+            "nova suiça", "barroca", "nova granada", "sagrada familia",
+            "lagoinha", "barro preto", "santo agostinho", "cruzeiro",
+            "contagem", "betim", "nova lima", "sabara",
+        ]
+        eh_bh_nome = any(t in endereco_lower for t in bairros_bh)
+
+        # Detectar CEP de BH/região metropolitana (30000-000 a 34999-999)
+        import re
+        cep_match = re.search(r"(\d{5})-?(\d{3})", endereco)
+        eh_bh_cep = False
+        if cep_match:
+            cep_num = int(cep_match.group(1))
+            eh_bh_cep = 30000 <= cep_num <= 34999
+
+        eh_bh = eh_bh_nome or eh_bh_cep
 
         if eh_bh:
             opcoes = [
