@@ -9,8 +9,10 @@ Responsável por:
 """
 
 import os
+import re
 import asyncio
 import httpx
+from html import unescape
 from typing import Dict, List, Optional
 from loguru import logger
 
@@ -28,6 +30,30 @@ class TinyProductsClient:
         if not self.token:
             logger.warning("⚠️ TINY_API_TOKEN ou TINY_TOKEN não configurado")
             logger.info("💡 Configure uma dessas variáveis com seu token da API v2 do Tiny")
+
+    @staticmethod
+    def _limpar_html(texto: str) -> str:
+        """
+        Remove tags HTML e normaliza whitespace de descricao_complementar.
+
+        O Tiny retorna HTML rico (com <p>, <span>, estilos CSS).
+        Esta função converte para texto puro legível.
+
+        Args:
+            texto: String com possível HTML
+
+        Returns:
+            Texto puro sem tags HTML, com whitespace normalizado
+        """
+        if not texto:
+            return ""
+        # Remover tags HTML
+        limpo = re.sub(r"<[^>]+>", " ", texto)
+        # Decodificar entidades HTML (&amp; → &, etc)
+        limpo = unescape(limpo)
+        # Normalizar whitespace (múltiplos espaços/newlines → espaço único)
+        limpo = re.sub(r"\s+", " ", limpo).strip()
+        return limpo
 
     @staticmethod
     def _converter_estoque(produto: Dict) -> float:
@@ -523,7 +549,7 @@ class TinyProductsClient:
             "codigo": produto.get("codigo", ""),
             "nome": produto.get("nome", ""),
             "descricao": produto.get("descricao", ""),
-            "descricao_complementar": produto.get("descricao_complementar", ""),
+            "descricao_complementar": self._limpar_html(produto.get("descricao_complementar", "")),
             "preco": float(produto.get("preco", 0) or 0),
             "preco_custo": float(produto.get("preco_custo", 0) or 0),
             "preco_promocional": float(produto.get("preco_promocional", 0) or 0),

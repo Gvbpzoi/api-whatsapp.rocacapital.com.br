@@ -155,12 +155,16 @@ async def sincronizar_produtos(
 
                     existe = cursor.fetchone()
 
+                    # Extrair descricao_complementar
+                    descricao_complementar = produto.get("descricao_complementar", "") or ""
+
                     if existe:
                         # Atualizar
                         cursor.execute("""
                             UPDATE produtos_site SET
                                 nome = %s,
                                 descricao = %s,
+                                descricao_complementar = %s,
                                 preco = %s,
                                 preco_promocional = %s,
                                 peso = %s,
@@ -177,6 +181,7 @@ async def sincronizar_produtos(
                         """, (
                             produto["nome"],
                             produto["descricao"],
+                            descricao_complementar,
                             produto["preco"],
                             produto["preco_promocional"],
                             peso,
@@ -196,6 +201,7 @@ async def sincronizar_produtos(
                         cursor.execute("""
                             INSERT INTO produtos_site (
                                 tiny_id, nome, descricao,
+                                descricao_complementar,
                                 preco, preco_promocional,
                                 peso, unidade,
                                 imagem_url, imagens_adicionais,
@@ -204,13 +210,14 @@ async def sincronizar_produtos(
                                 ativo, destaque,
                                 sincronizado_em, created_at, updated_at
                             ) VALUES (
-                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                                 NOW(), NOW(), NOW()
                             )
                         """, (
                             str(produto["tiny_id"]),
                             produto["nome"],
                             produto["descricao"],
+                            descricao_complementar,
                             produto["preco"],
                             produto["preco_promocional"],
                             peso,

@@ -76,6 +76,7 @@ class SupabaseProdutos:
                     tiny_id,
                     nome,
                     descricao,
+                    descricao_complementar,
                     preco,
                     preco_promocional,
                     peso,
@@ -122,21 +123,23 @@ class SupabaseProdutos:
                             OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(COALESCE(descricao_complementar, ''))) LIKE unaccent(LOWER(%s))
                         )
                     """
-                    params.extend([termo_like, termo_like, termo_like, termo_like])
+                    params.extend([termo_like, termo_like, termo_like, termo_like, termo_like])
                 else:
                     # Single word: busca simples
+                    termo_like = f"%{termo}%"
                     query += """
                         AND (
                             unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
                             OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                            OR unaccent(LOWER(COALESCE(descricao_complementar, ''))) LIKE unaccent(LOWER(%s))
                         )
                     """
-                    termo_like = f"%{termo}%"
-                    params.extend([termo_like, termo_like, termo_like, termo_like])
+                    params.extend([termo_like, termo_like, termo_like, termo_like, termo_like])
 
             # Ordenar por relevância: prioriza match em nome, depois categoria, depois tags
             if termo:
@@ -189,7 +192,8 @@ class SupabaseProdutos:
                 if len(palavras) > 1:
                     logger.info(f"🔄 Phrase search found 0, retrying with AND logic: {palavras}")
                     query2 = """
-                        SELECT id, tiny_id, nome, descricao, preco, preco_promocional,
+                        SELECT id, tiny_id, nome, descricao, descricao_complementar,
+                               preco, preco_promocional,
                                peso, unidade, imagem_url, link_produto, categoria,
                                subcategoria, tags, estoque_disponivel, quantidade_estoque, ativo
                         FROM produtos_site
@@ -211,9 +215,10 @@ class SupabaseProdutos:
                                 OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                                 OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
                                 OR unaccent(LOWER(descricao)) LIKE unaccent(LOWER(%s))
+                                OR unaccent(LOWER(COALESCE(descricao_complementar, ''))) LIKE unaccent(LOWER(%s))
                             )
                         """
-                        params2.extend([palavra_like, palavra_like, palavra_like, palavra_like])
+                        params2.extend([palavra_like, palavra_like, palavra_like, palavra_like, palavra_like])
 
                     query2 += " ORDER BY nome ASC LIMIT %s"
                     params2.append(limite)
@@ -257,6 +262,7 @@ class SupabaseProdutos:
                     tiny_id,
                     nome,
                     descricao,
+                    descricao_complementar,
                     preco,
                     preco_promocional,
                     peso,
@@ -347,8 +353,9 @@ class SupabaseProdutos:
                     unaccent(LOWER(nome)) LIKE unaccent(LOWER(%s))
                     OR unaccent(LOWER(categoria)) LIKE unaccent(LOWER(%s))
                     OR unaccent(LOWER(tags::text)) LIKE unaccent(LOWER(%s))
+                    OR unaccent(LOWER(COALESCE(descricao_complementar, ''))) LIKE unaccent(LOWER(%s))
                 )
-            """, (termo_like, termo_like, termo_like))
+            """, (termo_like, termo_like, termo_like, termo_like))
 
             result = cursor.fetchone()
             cursor.close()
