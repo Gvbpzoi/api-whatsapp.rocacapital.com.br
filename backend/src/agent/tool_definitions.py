@@ -236,7 +236,7 @@ CONFIRMAR_FRETE = {
             "properties": {
                 "tipo_frete": {
                     "type": "string",
-                    "description": "Tipo do frete escolhido (ex: 'lalamove', 'correios_pac', 'correios_sedex').",
+                    "description": "Tipo do frete escolhido (ex: 'lalamove', 'correios_sedex').",
                 },
                 "valor_frete": {
                     "type": "number",

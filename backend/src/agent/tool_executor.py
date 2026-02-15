@@ -319,27 +319,23 @@ class ToolExecutor:
                     "nome": "Motoboy (Lalamove)",
                     "valor": 12.50 + (peso_kg * 2),
                     "prazo": "45 minutos a 1 hora",
+                    "observacao": "Entrega no mesmo dia para pedidos ate 16h",
                 },
                 {
-                    "tipo": "correios_pac",
-                    "nome": "Correios PAC",
-                    "valor": 18.00 + (peso_kg * 3),
-                    "prazo": "2-3 dias uteis",
+                    "tipo": "correios_sedex",
+                    "nome": "Correios SEDEX",
+                    "valor": 25.00 + (peso_kg * 4),
+                    "prazo": "1-2 dias uteis",
                 },
             ]
         else:
             opcoes = [
                 {
-                    "tipo": "correios_pac",
-                    "nome": "Correios PAC",
-                    "valor": 25.00 + (peso_kg * 4),
-                    "prazo": "5-8 dias uteis",
-                },
-                {
                     "tipo": "correios_sedex",
                     "nome": "Correios SEDEX",
                     "valor": 35.00 + (peso_kg * 5),
                     "prazo": "2-3 dias uteis",
+                    "observacao": "Nao enviamos queijo se prazo > 3 dias",
                 },
             ]
 
