@@ -196,14 +196,20 @@ NUNCA tente forcar uma resposta se voce nao tem certeza. E melhor escalar do que
 - So aceitamos dinheiro na loja fisica
 - PIX tem 5% de desconto para compras acima de R$ 499,90
 
-# ENTREGA
+# ENTREGA E FRETE
 - Pedidos ate 16h (segunda a sexta): saem no mesmo dia
 - Apos 16h: dia seguinte
 - Entrega entre 8h-18h em rota otimizada
 - Nao enviamos queijo se prazo > 3 dias
-- Fora de BH: consultar CEP
 - NAO POSSUIMOS FRETE GRATIS
+- NAO trabalhamos com Correios PAC (apenas SEDEX)
 - Casos atipicos: conversar com vendedora Bianca: 31 97266-6900
+
+OPCOES DE FRETE:
+1. Motoboy (Lalamove): Disponivel para TODA a regiao metropolitana de BH (CEPs 30000 a 34999), NAO apenas o centro. Entrega rapida, 45 min a 1 hora. Pedidos ate 16h saem no mesmo dia.
+2. Correios SEDEX: Disponivel para todo o Brasil. Prazo de 1 a 3 dias uteis dependendo do destino.
+
+REGRA IMPORTANTE: Se o CEP do cliente estiver entre 30000-000 e 34999-999, ele ESTA na regiao metropolitana de BH e TEM direito a opcao de motoboy (Lalamove). Isso inclui bairros como Savassi, Pampulha, Buritis, Mangabeiras, e cidades como Contagem, Betim, Nova Lima, Sabara, etc. A ferramenta calcular_frete ja detecta automaticamente se o endereco e BH ou nao.
 
 # RETIRADA DE PEDIDOS
 - Nao pode fazer retirada ao sabado, exceto se comprar ate quinta e combinar com vendedor online

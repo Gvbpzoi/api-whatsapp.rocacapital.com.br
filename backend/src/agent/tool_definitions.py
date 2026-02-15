@@ -211,6 +211,10 @@ CALCULAR_FRETE = {
                     "type": "string",
                     "description": "Endereco completo (rua, numero, bairro, cidade). Aceita tambem CEP.",
                 },
+                "cep": {
+                    "type": "string",
+                    "description": "CEP do destino (8 digitos, ex: '30160-011'). Opcional se ja estiver no endereco.",
+                },
                 "valor_pedido": {
                     "type": "number",
                     "description": "Valor total do pedido em reais.",

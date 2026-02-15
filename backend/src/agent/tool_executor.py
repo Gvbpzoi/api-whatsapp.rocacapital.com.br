@@ -13,6 +13,7 @@ from loguru import logger
 from ..services.supabase_produtos import get_supabase_produtos
 from ..services.supabase_carrinho import get_supabase_carrinho
 from ..services.zapi_client import get_zapi_client
+from ..services.frete_service import get_frete_service
 
 
 def _decimal_default(obj):
@@ -28,6 +29,7 @@ class ToolExecutor:
         self.produtos_service = get_supabase_produtos()
         self.carrinho_service = get_supabase_carrinho()
         self.zapi_client = get_zapi_client()
+        self.frete_service = get_frete_service()
 
         self._handlers = {
             "buscar_produtos": self._buscar_produtos,
@@ -278,76 +280,24 @@ class ToolExecutor:
         return {"erro": "Falha ao enviar foto"}
 
     async def _calcular_frete(self, args: Dict, telefone: str) -> Dict:
-        """Calcula frete (mock com valores simulados por enquanto)."""
+        """Calcula frete real via Lalamove e Correios APIs."""
         endereco = args.get("endereco_completo", "")
+        cep = args.get("cep", "")
         valor_pedido = args.get("valor_pedido", 0)
         peso_kg = args.get("peso_kg", 1.0)
+
+        # Se veio CEP separado, incorporar no endereço
+        if cep and cep not in endereco:
+            endereco = f"{endereco} - {cep}"
 
         if not endereco:
             return {"erro": "Endereco obrigatorio para calcular frete"}
 
-        # Detectar se é BH por palavras-chave ou CEP
-        endereco_lower = endereco.lower()
-
-        # Bairros e cidades de BH / região metropolitana
-        bairros_bh = [
-            "belo horizonte", "bh", "savassi", "lourdes", "funcionarios",
-            "centro", "pampulha", "serra", "sion", "santa efigenia",
-            "gutierrez", "buritis", "belvedere", "mangabeiras", "anchieta",
-            "santo antonio", "carmo", "cidade nova", "floresta", "horto",
-            "santa tereza", "padre eustaquio", "carlos prates", "caiçara",
-            "nova suiça", "barroca", "nova granada", "sagrada familia",
-            "lagoinha", "barro preto", "santo agostinho", "cruzeiro",
-            "contagem", "betim", "nova lima", "sabara",
-        ]
-        eh_bh_nome = any(t in endereco_lower for t in bairros_bh)
-
-        # Detectar CEP de BH/região metropolitana (30000-000 a 34999-999)
-        import re
-        cep_match = re.search(r"(\d{5})-?(\d{3})", endereco)
-        eh_bh_cep = False
-        if cep_match:
-            cep_num = int(cep_match.group(1))
-            eh_bh_cep = 30000 <= cep_num <= 34999
-
-        eh_bh = eh_bh_nome or eh_bh_cep
-
-        if eh_bh:
-            opcoes = [
-                {
-                    "tipo": "lalamove",
-                    "nome": "Motoboy (Lalamove)",
-                    "valor": 12.50 + (peso_kg * 2),
-                    "prazo": "45 minutos a 1 hora",
-                    "observacao": "Entrega no mesmo dia para pedidos ate 16h",
-                },
-                {
-                    "tipo": "correios_sedex",
-                    "nome": "Correios SEDEX",
-                    "valor": 25.00 + (peso_kg * 4),
-                    "prazo": "1-2 dias uteis",
-                },
-            ]
-        else:
-            opcoes = [
-                {
-                    "tipo": "correios_sedex",
-                    "nome": "Correios SEDEX",
-                    "valor": 35.00 + (peso_kg * 5),
-                    "prazo": "2-3 dias uteis",
-                    "observacao": "Nao enviamos queijo se prazo > 3 dias",
-                },
-            ]
-
-        # Arredondar valores
-        for op in opcoes:
-            op["valor"] = round(op["valor"], 2)
-
-        return {
-            "endereco": endereco,
-            "opcoes_frete": opcoes,
-            "mensagem": "Frete calculado com sucesso",
-        }
+        return await self.frete_service.calcular(
+            endereco=endereco,
+            valor_pedido=valor_pedido,
+            peso_kg=peso_kg,
+        )
 
     async def _confirmar_frete(self, args: Dict, telefone: str) -> Dict:
         tipo_frete = args.get("tipo_frete", "")
