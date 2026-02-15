@@ -544,12 +544,17 @@ class TinyProductsClient:
                         if url:
                             imagens_urls.append(url)
 
+        # Usar descricao_complementar como descricao principal (campo descricao do Tiny vem vazio)
+        descricao_complementar = self._limpar_html(produto.get("descricao_complementar", ""))
+        descricao_simples = produto.get("descricao", "")
+        descricao_final = descricao_complementar or descricao_simples
+
         return {
             "tiny_id": int(produto.get("id", 0)),
             "codigo": produto.get("codigo", ""),
             "nome": produto.get("nome", ""),
-            "descricao": produto.get("descricao", ""),
-            "descricao_complementar": self._limpar_html(produto.get("descricao_complementar", "")),
+            "descricao": descricao_final,
+            "observacoes": produto.get("obs", "") or produto.get("observacoes", "") or "",
             "preco": float(produto.get("preco", 0) or 0),
             "preco_custo": float(produto.get("preco_custo", 0) or 0),
             "preco_promocional": float(produto.get("preco_promocional", 0) or 0),

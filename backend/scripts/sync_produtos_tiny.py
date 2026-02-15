@@ -110,18 +110,17 @@ async def sincronizar_produtos():
 
                 existe = cursor.fetchone()
 
+                # Extrair observacoes
+                observacoes = produto.get("observacoes", "") or ""
+
                 if existe:
                     # Atualizar produto existente
-                    # Combinar descrição + descrição complementar
-                    descricao_completa = produto.get("descricao", "")
-                    desc_complementar = produto.get("descricao_complementar", "")
-                    if desc_complementar and desc_complementar.strip():
-                        descricao_completa = f"{descricao_completa}\n\n{desc_complementar}"
-
+                    # descricao já vem unificada do tiny_products_client
                     cursor.execute("""
                         UPDATE produtos_site SET
                             nome = %s,
                             descricao = %s,
+                            observacoes = %s,
                             preco = %s,
                             preco_promocional = %s,
                             peso = %s,
@@ -138,7 +137,8 @@ async def sincronizar_produtos():
                         WHERE tiny_id = %s
                     """, (
                         produto["nome"],
-                        descricao_completa,
+                        produto["descricao"],
+                        observacoes,
                         produto["preco"],
                         produto["preco_promocional"],
                         peso,
@@ -157,15 +157,11 @@ async def sincronizar_produtos():
 
                 else:
                     # Inserir novo produto
-                    # Combinar descrição + descrição complementar
-                    descricao_completa = produto.get("descricao", "")
-                    desc_complementar = produto.get("descricao_complementar", "")
-                    if desc_complementar and desc_complementar.strip():
-                        descricao_completa = f"{descricao_completa}\n\n{desc_complementar}"
-
+                    # descricao já vem unificada do tiny_products_client
                     cursor.execute("""
                         INSERT INTO produtos_site (
                             tiny_id, nome, descricao,
+                            observacoes,
                             preco, preco_promocional,
                             peso, unidade,
                             imagem_url, imagens_adicionais,
@@ -175,12 +171,13 @@ async def sincronizar_produtos():
                             ativo, destaque,
                             sincronizado_em, created_at, updated_at
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), NOW()
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), NOW()
                         )
                     """, (
                         str(produto["tiny_id"]),
                         produto["nome"],
-                        descricao_completa,
+                        produto["descricao"],
+                        observacoes,
                         produto["preco"],
                         produto["preco_promocional"],
                         peso,
