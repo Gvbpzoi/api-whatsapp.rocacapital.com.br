@@ -214,42 +214,69 @@ class ToolExecutor:
 
     async def _limpar_carrinho(self, args: Dict, telefone: str) -> Dict:
         self.carrinho_service.limpar_carrinho(telefone)
-        return {"sucesso": True, "mensagem": "Carrinho limpo"}
+        self.carrinho_service.limpar_frete(telefone)
+        return {"sucesso": True, "mensagem": "Carrinho e frete limpos"}
 
     async def _gerar_pix(self, args: Dict, telefone: str) -> Dict:
-        """Gera pagamento PIX (mock por enquanto)."""
-        total = self.carrinho_service.calcular_total(telefone)
-        if total <= 0:
+        """Gera pagamento PIX (mock por enquanto). Inclui frete confirmado no total."""
+        total_produtos = self.carrinho_service.calcular_total(telefone)
+        if total_produtos <= 0:
             return {"erro": "Carrinho vazio. Adicione produtos antes de gerar pagamento."}
+
+        # Buscar frete confirmado
+        frete = self.carrinho_service.obter_frete(telefone)
+        valor_frete = frete["valor_frete"] if frete else 0
+        total = total_produtos + valor_frete
 
         numero_pedido = "RC-" + "".join(random.choices(string.digits, k=6))
         # PIX copia-e-cola simulado
         pix_code = f"00020126580014br.gov.bcb.pix0136rocacapital@pix.com5204000053039865406{total:.2f}5802BR5913ROCA CAPITAL6009Belo Horizonte62070503***6304"
 
-        return {
+        result = {
             "sucesso": True,
             "numero_pedido": numero_pedido,
+            "total_produtos": float(total_produtos),
+            "valor_frete": float(valor_frete),
             "total": float(total),
             "qr_code": pix_code,
-            "mensagem": f"PIX gerado! Pedido {numero_pedido}, Total R$ {total:.2f}",
+            "mensagem": f"PIX gerado! Pedido {numero_pedido}, Produtos R$ {total_produtos:.2f} + Frete R$ {valor_frete:.2f} = Total R$ {total:.2f}",
         }
 
+        if frete:
+            result["tipo_frete"] = frete["tipo_frete"]
+            result["prazo_entrega"] = frete["prazo_entrega"]
+
+        return result
+
     async def _gerar_pagamento(self, args: Dict, telefone: str) -> Dict:
-        """Gera link de pagamento cartão (mock por enquanto)."""
-        total = self.carrinho_service.calcular_total(telefone)
-        if total <= 0:
+        """Gera link de pagamento cartão (mock por enquanto). Inclui frete confirmado no total."""
+        total_produtos = self.carrinho_service.calcular_total(telefone)
+        if total_produtos <= 0:
             return {"erro": "Carrinho vazio. Adicione produtos antes de gerar pagamento."}
+
+        # Buscar frete confirmado
+        frete = self.carrinho_service.obter_frete(telefone)
+        valor_frete = frete["valor_frete"] if frete else 0
+        total = total_produtos + valor_frete
 
         numero_pedido = "RC-" + "".join(random.choices(string.digits, k=6))
         link = f"https://pay.rocacapital.com.br/checkout/{numero_pedido}"
 
-        return {
+        result = {
             "sucesso": True,
             "numero_pedido": numero_pedido,
+            "total_produtos": float(total_produtos),
+            "valor_frete": float(valor_frete),
             "total": float(total),
             "link_pagamento": link,
-            "mensagem": f"Link gerado! Pedido {numero_pedido}, Total R$ {total:.2f}",
+            "mensagem": f"Link gerado! Pedido {numero_pedido}, Produtos R$ {total_produtos:.2f} + Frete R$ {valor_frete:.2f} = Total R$ {total:.2f}",
         }
+
+        if frete:
+            result["tipo_frete"] = frete["tipo_frete"]
+            result["prazo_entrega"] = frete["prazo_entrega"]
+
+        return result
 
     async def _enviar_qr_code_pix(self, args: Dict, telefone: str) -> Dict:
         """Envia QR Code PIX via ZAPI (mock por enquanto)."""
@@ -304,13 +331,20 @@ class ToolExecutor:
         valor_frete = args.get("valor_frete", 0)
         prazo_entrega = args.get("prazo_entrega", "")
 
-        # Salvar no banco (simplificado - salva como preferência do cliente)
+        # Persistir frete confirmado no banco
+        self.carrinho_service.salvar_frete(
+            telefone=telefone,
+            tipo_frete=tipo_frete,
+            valor_frete=valor_frete,
+            prazo_entrega=prazo_entrega,
+        )
+
         return {
             "sucesso": True,
             "tipo_frete": tipo_frete,
             "valor_frete": valor_frete,
             "prazo_entrega": prazo_entrega,
-            "mensagem": f"Frete confirmado: {tipo_frete} - R$ {valor_frete:.2f} ({prazo_entrega})",
+            "mensagem": f"Frete confirmado: {tipo_frete} - R$ {valor_frete:.2f} ({prazo_entrega}). Este valor sera adicionado ao total do pagamento automaticamente.",
         }
 
     async def _salvar_endereco(self, args: Dict, telefone: str) -> Dict:

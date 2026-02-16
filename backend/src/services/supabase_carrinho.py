@@ -242,15 +242,68 @@ class SupabaseCarrinho:
         try:
             query = "SELECT COUNT(*) as count FROM carrinhos WHERE telefone = %s"
             result = self._execute(query, (telefone,))
-            
+
             if result:
                 return result[0]["count"]
-            
+
             return 0
 
         except Exception as e:
             logger.error(f"❌ Erro ao contar itens: {e}")
             return 0
+
+    # ==================== Frete Confirmado ====================
+
+    def salvar_frete(self, telefone: str, tipo_frete: str, valor_frete: float, prazo_entrega: str) -> bool:
+        """Salva ou atualiza o frete confirmado para o cliente"""
+        try:
+            query = """
+                INSERT INTO frete_confirmado (telefone, tipo_frete, valor_frete, prazo_entrega, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (telefone)
+                DO UPDATE SET
+                    tipo_frete = EXCLUDED.tipo_frete,
+                    valor_frete = EXCLUDED.valor_frete,
+                    prazo_entrega = EXCLUDED.prazo_entrega,
+                    updated_at = NOW()
+            """
+            self._execute(query, (telefone, tipo_frete, valor_frete, prazo_entrega), fetch=False)
+            logger.info(f"✅ Frete salvo: {tipo_frete} R$ {valor_frete:.2f} para {telefone[:8]}...")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Erro ao salvar frete: {e}")
+            return False
+
+    def obter_frete(self, telefone: str) -> Optional[Dict]:
+        """Obtém o frete confirmado do cliente"""
+        try:
+            query = """
+                SELECT tipo_frete, valor_frete, prazo_entrega
+                FROM frete_confirmado
+                WHERE telefone = %s
+            """
+            result = self._execute(query, (telefone,))
+            if result and len(result) > 0:
+                return {
+                    "tipo_frete": result[0]["tipo_frete"],
+                    "valor_frete": float(result[0]["valor_frete"]),
+                    "prazo_entrega": result[0]["prazo_entrega"],
+                }
+            return None
+        except Exception as e:
+            logger.error(f"❌ Erro ao obter frete: {e}")
+            return None
+
+    def limpar_frete(self, telefone: str) -> bool:
+        """Remove o frete confirmado do cliente"""
+        try:
+            query = "DELETE FROM frete_confirmado WHERE telefone = %s"
+            self._execute(query, (telefone,), fetch=False)
+            logger.info(f"🗑️ Frete limpo para {telefone[:8]}...")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Erro ao limpar frete: {e}")
+            return False
 
 
 # Singleton global
