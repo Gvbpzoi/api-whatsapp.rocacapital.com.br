@@ -308,7 +308,7 @@ ESCALAR_ATENDIMENTO = {
     "type": "function",
     "function": {
         "name": "escalar_atendimento",
-        "description": "Transfere a conversa para atendimento humano. Use quando: cliente pede para falar com pessoa, voce nao consegue resolver, ou cliente esta frustrado.",
+        "description": "Transfere a conversa para atendimento humano. Use quando: cliente pede para falar com pessoa, voce nao consegue resolver, ou cliente esta frustrado. IMPORTANTE: inclua o nome do cliente (se souber) e um resumo da conversa para dar contexto a vendedora.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -321,8 +321,16 @@ ESCALAR_ATENDIMENTO = {
                     "type": "string",
                     "description": "Descricao breve do motivo da escalacao.",
                 },
+                "nome_cliente": {
+                    "type": "string",
+                    "description": "Nome do cliente, se mencionado na conversa.",
+                },
+                "resumo_conversa": {
+                    "type": "string",
+                    "description": "Resumo breve da conversa ate o momento: o que o cliente pediu, o que foi feito, e por que precisa de ajuda humana.",
+                },
             },
-            "required": ["motivo", "descricao"],
+            "required": ["motivo", "descricao", "resumo_conversa"],
         },
     },
 }

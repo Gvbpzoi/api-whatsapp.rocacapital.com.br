@@ -432,24 +432,36 @@ class ToolExecutor:
         return {
             "numero_pedido": numero_pedido,
             "status": "processando",
-            "mensagem": f"Pedido {numero_pedido} esta sendo processado. Para mais detalhes, fale com a Bianca: 31 97266-6900",
+            "mensagem": f"Pedido {numero_pedido} esta sendo processado. Para mais detalhes, fale com a Bianca: 31 98484-4384",
         }
 
     async def _escalar_atendimento(self, args: Dict, telefone: str) -> Dict:
         motivo = args.get("motivo", "pediu_humano")
         descricao = args.get("descricao", "")
+        nome_cliente = args.get("nome_cliente", "")
+        resumo_conversa = args.get("resumo_conversa", "")
 
         logger.info(f"Escalando atendimento: {telefone[:8]} - {motivo}: {descricao}")
 
-        # Enviar notificação para Bianca
+        # Montar notificação com contexto para Bianca
+        identificacao = f"👤 Cliente: {nome_cliente}\n" if nome_cliente else ""
+        msg_bianca = (
+            f"🔔 *Atendimento escalado!*\n\n"
+            f"{identificacao}"
+            f"📱 Telefone: {telefone}\n"
+            f"📋 Motivo: {descricao}\n"
+        )
+        if resumo_conversa:
+            msg_bianca += f"\n💬 *Resumo da conversa:*\n{resumo_conversa}\n"
+
         self.zapi_client.send_text(
-            phone="5531972666900",
-            message=f"Atendimento escalado!\n\nCliente: {telefone}\nMotivo: {motivo}\nDescricao: {descricao}",
+            phone="5531984844384",
+            message=msg_bianca,
         )
 
         return {
             "sucesso": True,
-            "mensagem": "Atendimento escalado para vendedora Bianca (31 97266-6900)",
-            "contato_humano": "31 97266-6900",
+            "mensagem": "Atendimento escalado para vendedora Bianca (31 98484-4384)",
+            "contato_humano": "31 98484-4384",
             "vendedora": "Bianca",
         }
