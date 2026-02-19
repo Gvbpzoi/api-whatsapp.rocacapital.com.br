@@ -11,6 +11,7 @@ import os
 
 from ..services.zapi_client import get_zapi_client
 from ..services.session_manager import SessionManager
+from ..models.session import SessionMode
 from ..services.media_processor import MediaProcessor
 from ..agent.ai_agent import AIAgent
 
@@ -24,6 +25,7 @@ media_processor: Optional[MediaProcessor] = None
 
 # Feature flag para migração zero-downtime
 USE_AI_AGENT = os.getenv("USE_AI_AGENT", "true").lower() == "true"
+
 
 # Lock por telefone para evitar race condition no buffer
 _phone_locks: Dict[str, asyncio.Lock] = {}
@@ -228,25 +230,37 @@ async def zapi_webhook(request: Request, background_tasks: BackgroundTasks):
         from_me = data.get("fromMe", False)
         is_group = data.get("isGroup", False)
 
-        # Ignorar mensagens de grupo e próprias
+        # Ignorar mensagens de grupo
         if is_group:
             return {"success": True, "message": "Mensagem de grupo ignorada"}
-        if from_me:
-            return {"success": True, "message": "Mensagem propria ignorada"}
         if not phone:
             return {"success": False, "error": "Telefone nao identificado"}
 
-        # Detectar comandos do humano
+        # Extrair texto bruto
         text_data = data.get("text", {})
         raw_text = text_data.get("message", "") if text_data else ""
 
-        if raw_text.startswith("/"):
-            session_manager._process_command(phone, raw_text)
-            return {"success": True, "message": "Comando processado"}
+        # === Mensagens do operador (fromMe=True) ===
+        if from_me:
+            # Comandos do operador: /assumir, /liberar, /pausar, etc.
+            if raw_text.startswith("/"):
+                result = session_manager._process_command(phone, raw_text)
+                # Enviar resposta do comando de volta no WhatsApp
+                zapi = get_zapi_client()
+                zapi.send_text(phone, result.message)
+                logger.info(f"Comando operador {raw_text} para {phone[:8]}: {result.message}")
+                return {"success": True, "message": "Comando operador processado"}
 
-        # Detectar indicadores de humano
-        if session_manager.detect_human_interference(raw_text):
-            return {"success": True, "message": "Humano detectado"}
+            # Detectar indicadores de humano ([HUMANO], [ATENDENTE])
+            if session_manager.detect_human_interference(raw_text):
+                session_manager._set_mode(phone, SessionMode.HUMAN, "operador")
+                logger.info(f"Operador assumiu via indicador para {phone[:8]}")
+                return {"success": True, "message": "Humano detectado"}
+
+            # Mensagem normal do operador: ignorar (não processar pelo bot)
+            return {"success": True, "message": "Mensagem propria ignorada"}
+
+        # === Mensagens do cliente (fromMe=False) ===
 
         # Extrair mídia
         media_type, message, media_url = _extract_media(data)
