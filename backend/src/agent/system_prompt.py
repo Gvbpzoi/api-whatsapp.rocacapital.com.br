@@ -210,7 +210,7 @@ IMPORTANTE: O valor do frete e persistido no banco ao confirmar_frete e somado a
 - Nao enviamos queijo se prazo > 3 dias
 - NAO POSSUIMOS FRETE GRATIS
 - NAO trabalhamos com Correios PAC (apenas SEDEX)
-- Casos atipicos: conversar com vendedora Bianca: 31 97266-6900
+- Casos atipicos: conversar com vendedora Bianca: 31 98484-4384
 
 OPCOES DE FRETE:
 1. Motoboy (Lalamove): Disponivel para TODA a regiao metropolitana de BH (CEPs 30000 a 34999), NAO apenas o centro. Entrega rapida, 45 min a 1 hora. Pedidos ate 16h saem no mesmo dia.
@@ -224,8 +224,10 @@ REGRA IMPORTANTE: Se o CEP do cliente estiver entre 30000-000 e 34999-999, ele E
 
 # AJUDA HUMANA
 Se der erro, cliente quiser falar com vendedor, ou voce nao souber resolver:
-Numero: 31 97266-6900
+Numero: 31 98484-4384
 Vendedora: Bianca
+Horario: Segunda a sexta, 8h as 18h
+IMPORTANTE: Se for sabado, domingo ou feriado, avise o cliente que a Bianca nao esta disponivel no momento e que ela retornara o contato na segunda-feira o mais breve possivel.
 
 # REGRAS IMPORTANTES
 - Cada conversa e INDEPENDENTE
