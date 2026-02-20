@@ -175,6 +175,11 @@ async def process_and_respond(
 
             logger.info(f"Processando: {combined_message[:60]}...")
 
+            # === Verificar kill switch global ===
+            if not session_manager.is_globally_active():
+                logger.info(f"Agente desativado globalmente, ignorando {phone[:8]}")
+                return
+
             # === Verificar modo da sessão ===
             session = session_manager.get_session(phone)
             if session.mode != "agent":

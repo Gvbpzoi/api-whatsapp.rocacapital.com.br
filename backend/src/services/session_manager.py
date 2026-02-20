@@ -30,6 +30,8 @@ class SessionManager:
         "/status": "Mostra status atual da sessao",
         "/assumir": "Humano assume o atendimento",
         "/liberar": "Libera conversa de volta para o agente",
+        "/ativar": "Liga o agente globalmente",
+        "/desativar": "Desliga o agente globalmente (kill switch)",
         "/help": "Lista comandos disponiveis",
     }
 
@@ -44,6 +46,7 @@ class SessionManager:
         self._sessions: Dict[str, SessionStatus] = {}
         self._auto_pause_timeout = 300  # 5min sem resposta do humano -> retoma bot
         self._message_buffer: Dict[str, dict] = {}
+        self._global_active = True  # Kill switch global
 
     # ==================== Sessão ====================
 
@@ -55,8 +58,12 @@ class SessionManager:
             )
         return self._sessions[phone]
 
+    def is_globally_active(self) -> bool:
+        """Verifica se o agente está ligado globalmente."""
+        return self._global_active
+
     def is_agent_active(self, phone: str) -> bool:
-        return self.get_session(phone).mode == SessionMode.AGENT
+        return self._global_active and self.get_session(phone).mode == SessionMode.AGENT
 
     def is_human_active(self, phone: str) -> bool:
         return self.get_session(phone).mode == SessionMode.HUMAN
@@ -180,6 +187,8 @@ class SessionManager:
             "/retomar": self._cmd_resume,
             "/assumir": self._cmd_takeover,
             "/liberar": self._cmd_resume,
+            "/ativar": lambda p, a: self._cmd_activate(),
+            "/desativar": lambda p, a: self._cmd_deactivate(),
             "/status": lambda p, a: self._cmd_status(p),
             "/help": lambda p, a: self._cmd_help(),
         }
@@ -238,8 +247,10 @@ class SessionManager:
             SessionMode.HUMAN: "HUMANO",
             SessionMode.PAUSED: "PAUSADO",
         }
+        global_status = "✅ ATIVADO" if self._global_active else "🔴 DESATIVADO"
         status_msg = (
             f"Status da Sessao\n"
+            f"Agente Global: {global_status}\n"
             f"Cliente: {phone}\n"
             f"Modo: {mode_emoji.get(session.mode, '?')}\n"
             f"Atendente: {session.human_attendant or 'Nenhum'}\n"
@@ -252,6 +263,22 @@ class SessionManager:
             message=status_msg,
             current_mode=session.mode,
             data=session.dict(),
+        )
+
+    def _cmd_activate(self) -> CommandResult:
+        self._global_active = True
+        logger.info("Agente ATIVADO globalmente")
+        return CommandResult(
+            success=True,
+            message="✅ Agente ATIVADO. Voltando a responder todas as conversas.",
+        )
+
+    def _cmd_deactivate(self) -> CommandResult:
+        self._global_active = False
+        logger.info("Agente DESATIVADO globalmente")
+        return CommandResult(
+            success=True,
+            message="🔴 Agente DESATIVADO. Nenhuma conversa sera respondida ate /ativar.",
         )
 
     def _cmd_help(self) -> CommandResult:
