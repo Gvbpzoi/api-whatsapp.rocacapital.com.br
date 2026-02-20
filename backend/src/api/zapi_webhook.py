@@ -245,6 +245,8 @@ async def zapi_webhook(request: Request, background_tasks: BackgroundTasks):
         text_data = data.get("text", {})
         raw_text = text_data.get("message", "") if text_data else ""
 
+        logger.debug(f"Webhook: phone={phone[:8]}, fromMe={from_me}, raw_text='{raw_text[:50]}'")
+
         # === Mensagens do operador (fromMe=True) ===
         if from_me:
             # Comandos do operador: /assumir, /liberar, /pausar, etc.
