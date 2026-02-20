@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from loguru import logger
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
@@ -32,14 +33,37 @@ class ChatHistoryManager:
         db_url = os.getenv("DIRECT_URL") or os.getenv("DATABASE_URL")
         if db_url:
             self.db_url = _sanitize_dsn(db_url)
+            try:
+                self._pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=5,
+                    dsn=self.db_url,
+                    sslmode="require",
+                )
+                logger.info("Connection pool Postgres criado (1-5 conexoes)")
+            except Exception as e:
+                logger.error(f"Erro ao criar pool: {e}")
+                self._pool = None
         else:
             self.db_url = None
+            self._pool = None
             logger.warning("Sem DATABASE_URL - historico desabilitado")
 
     def _get_connection(self):
-        if not self.db_url:
+        if not self._pool:
             return None
-        return psycopg2.connect(self.db_url, sslmode="require")
+        try:
+            return self._pool.getconn()
+        except Exception as e:
+            logger.error(f"Erro ao obter conexao do pool: {e}")
+            return None
+
+    def _put_connection(self, conn):
+        if conn and self._pool:
+            try:
+                self._pool.putconn(conn)
+            except Exception:
+                pass
 
     def load_history(self, telefone: str, limit: int = 30) -> List[Dict[str, Any]]:
         """
@@ -64,7 +88,7 @@ class ChatHistoryManager:
             )
             rows = cursor.fetchall()
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             # Reverter ordem (DESC -> cronológica)
             rows.reverse()
@@ -100,7 +124,7 @@ class ChatHistoryManager:
         except Exception as e:
             logger.error(f"Erro ao carregar historico: {e}")
             if conn:
-                conn.close()
+                self._put_connection(conn)
             return []
 
     @staticmethod
@@ -208,13 +232,13 @@ class ChatHistoryManager:
             )
             conn.commit()
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
         except Exception as e:
             logger.error(f"Erro ao salvar mensagem: {e}")
             if conn:
                 try:
                     conn.rollback()
-                    conn.close()
+                    self._put_connection(conn)
                 except Exception:
                     pass
 
@@ -238,7 +262,7 @@ class ChatHistoryManager:
             )
             row = cursor.fetchone()
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             if row:
                 return row[0]
@@ -247,7 +271,7 @@ class ChatHistoryManager:
         except Exception as e:
             logger.error(f"Erro ao buscar ultima mensagem: {e}")
             if conn:
-                conn.close()
+                self._put_connection(conn)
             return None
 
     def is_new_conversation(self, telefone: str, timeout_minutes: int = 30) -> bool:
