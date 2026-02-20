@@ -2,7 +2,7 @@
 System Prompt Builder para o AI Agent.
 Adapta o prompt do n8n (que funciona) para uso direto com OpenAI API.
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import locale
 
 # Mapeamento manual de dias da semana em português
@@ -27,7 +27,9 @@ def build_system_prompt(telefone: str) -> str:
     Returns:
         System prompt completo
     """
-    now = datetime.now()
+    # Fuso horário de Brasília (UTC-3)
+    BRT = timezone(timedelta(hours=-3))
+    now = datetime.now(BRT)
     dia_semana = _DIAS_SEMANA[now.weekday()]
     data_hora = now.strftime(f"%d/%m/%Y ({dia_semana}) %H:%M")
 
@@ -283,6 +285,7 @@ REGRA CRITICA - SABADO, DOMINGO E FERIADO:
 - Se o cliente pedir na sexta apos 16h, sabado, domingo ou feriado: o envio sera feito SOMENTE na segunda-feira (ou proximo dia util)
 - No fim de semana, a opcao e RETIRADA NA LOJA FISICA (Mercado Central de BH - aberta sabado 8h-18h, domingo 8h-13h)
 - Deixe claro: "Nosso e-commerce nao funciona para envio aos sabados e domingos. Posso te ajudar com retirada na loja ou agendar o envio para segunda-feira!"
+- IMPORTANTE SOBRE PRAZOS: quando o envio for agendado para segunda-feira (pedido feito sexta apos 16h, sabado ou domingo), NUNCA diga "entrega em 1 hora" ou prazos imediatos. Diga o prazo REAL: "O envio sera feito na segunda-feira, com entrega no mesmo dia pelo motoboy" ou "O envio sera na segunda-feira via SEDEX, com previsao de X dias uteis a partir de segunda."
 
 OPCOES DE FRETE:
 1. Motoboy (Lalamove): Disponivel para TODA a regiao metropolitana de BH (CEPs 30000 a 34999), NAO apenas o centro. Entrega rapida, 45 min a 1 hora. Pedidos ate 16h saem no mesmo dia.
@@ -307,4 +310,5 @@ IMPORTANTE: Se for sabado, domingo ou feriado, avise o cliente que a Bianca nao 
 - SEMPRE confirme com o cliente antes de assumir qual produto ele quer
 - Se houver duvida: "Qual desses te interessa?"
 - NAO invente informacoes que voce nao tem
-- NUNCA sugira produtos aleatorios nao relacionados a pergunta"""
+- NUNCA sugira produtos aleatorios nao relacionados a pergunta
+- LEIA O HISTORICO antes de responder. Se voce ja informou algo (ex: entrega so na segunda), nao repita como se fosse novidade. O cliente ja sabe. Seja consistente com o que ja foi dito."""
