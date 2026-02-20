@@ -4,6 +4,7 @@ Substitui os mocks por dados reais da tabela produtos_site
 """
 import os
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Optional
 from loguru import logger
@@ -33,14 +34,38 @@ class SupabaseProdutos:
         if not self.database_url:
             logger.warning("⚠️ DATABASE_URL não configurado - usando modo mock")
             self.database_url = None
+            self._pool = None
         else:
             self.database_url = sanitize_pg_dsn(self.database_url)
+            try:
+                self._pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=5,
+                    dsn=self.database_url,
+                    sslmode="require",
+                )
+                logger.info("Connection pool Produtos criado (1-5 conexoes)")
+            except Exception as e:
+                logger.error(f"Erro ao criar pool produtos: {e}")
+                self._pool = None
 
     def _get_connection(self):
-        """Cria conexão com banco"""
-        if not self.database_url:
+        """Obtém conexão do pool"""
+        if not self._pool:
             return None
-        return psycopg2.connect(self.database_url, sslmode="require")
+        try:
+            return self._pool.getconn()
+        except Exception as e:
+            logger.error(f"Erro ao obter conexao do pool produtos: {e}")
+            return None
+
+    def _put_connection(self, conn):
+        """Devolve conexão ao pool"""
+        if conn and self._pool:
+            try:
+                self._pool.putconn(conn)
+            except Exception:
+                pass
 
     def buscar_produtos(
         self,
@@ -225,13 +250,15 @@ class SupabaseProdutos:
                     logger.info(f"🔄 AND fallback: {len(produtos)} products found")
 
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             # Converter RealDictRow para dict normal
             return [dict(p) for p in produtos]
 
         except Exception as e:
             logger.error(f"❌ Erro ao buscar produtos: {e}")
+            if conn:
+                self._put_connection(conn)
             return []
 
     def buscar_produto_por_id(self, produto_id: str) -> Optional[Dict]:
@@ -279,12 +306,14 @@ class SupabaseProdutos:
             produto = cursor.fetchone()
 
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             return dict(produto) if produto else None
 
         except Exception as e:
             logger.error(f"❌ Erro ao buscar produto {produto_id}: {e}")
+            if conn:
+                self._put_connection(conn)
             return None
 
     def listar_categorias(self) -> List[str]:
@@ -313,12 +342,14 @@ class SupabaseProdutos:
             categorias = [row[0] for row in cursor.fetchall()]
 
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             return categorias
 
         except Exception as e:
             logger.error(f"❌ Erro ao listar categorias: {e}")
+            if conn:
+                self._put_connection(conn)
             return []
 
     def contar_por_termo(self, termo: str) -> int:
@@ -354,12 +385,14 @@ class SupabaseProdutos:
 
             result = cursor.fetchone()
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             return result[0] if result else 0
 
         except Exception as e:
             logger.error(f"❌ Erro ao contar produtos para '{termo}': {e}")
+            if conn:
+                self._put_connection(conn)
             return 0
 
     def buscar_produtos_em_destaque(self, limite: int = 10) -> List[Dict]:
@@ -400,12 +433,14 @@ class SupabaseProdutos:
             produtos = cursor.fetchall()
 
             cursor.close()
-            conn.close()
+            self._put_connection(conn)
 
             return [dict(p) for p in produtos]
 
         except Exception as e:
             logger.error(f"❌ Erro ao buscar produtos em destaque: {e}")
+            if conn:
+                self._put_connection(conn)
             return []
 
 
