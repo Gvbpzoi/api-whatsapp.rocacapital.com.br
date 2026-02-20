@@ -2,7 +2,7 @@
 Webhook ZAPI: recebe mensagens WhatsApp, processa mídia, bufferiza e chama AI Agent.
 """
 
-from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi import APIRouter, Request
 from typing import Optional, Dict
 from datetime import datetime
 from loguru import logger
@@ -149,9 +149,10 @@ async def process_and_respond(
 
             # === Buffer de mensagens ===
             buffer_result = session_manager.add_to_buffer(phone, processed_message)
+            my_count = buffer_result["count"]
 
             if buffer_result["should_wait"]:
-                logger.info(f"Aguardando mais mensagens no buffer ({buffer_result['count']})")
+                logger.info(f"Aguardando mais mensagens no buffer ({my_count})")
                 await asyncio.sleep(3.0)
 
                 # Re-fetch buffer após sleep
@@ -162,8 +163,9 @@ async def process_and_respond(
                     logger.info("Buffer ja processado por outra task")
                     return
 
-                if len(messages) > buffer_result["count"]:
-                    logger.info("Novas mensagens chegaram, deixando proximo ciclo processar")
+                # Se chegaram mais mensagens durante o sleep, SÓ a última task processa
+                if len(messages) > my_count:
+                    logger.info(f"Novas mensagens chegaram ({len(messages)} > {my_count}), deixando proximo ciclo processar")
                     return
 
                 combined_message = " ".join([msg["text"] for msg in messages])
@@ -182,8 +184,9 @@ async def process_and_respond(
 
             # === Verificar modo da sessão ===
             session = session_manager.get_session(phone)
+            logger.info(f"Modo sessao {phone[:8]}: {session.mode}")
             if session.mode != "agent":
-                logger.info(f"Agente pausado para {phone[:8]}, modo: {session.mode}")
+                logger.info(f"Agente pausado para {phone[:8]}, modo: {session.mode}. Ignorando mensagem.")
                 return
 
             # === Chamar AI Agent ===
@@ -222,7 +225,7 @@ async def process_and_respond(
 
 
 @router.post("/webhook/zapi")
-async def zapi_webhook(request: Request, background_tasks: BackgroundTasks):
+async def zapi_webhook(request: Request):
     """
     Webhook para receber mensagens da ZAPI.
     Processa texto, áudio, imagem e documentos.
@@ -275,9 +278,9 @@ async def zapi_webhook(request: Request, background_tasks: BackgroundTasks):
         if not message and media_type == "text":
             return {"success": True, "message": "Mensagem vazia ignorada"}
 
-        # Processar em background
-        background_tasks.add_task(
-            process_and_respond, phone, message, media_type, media_url
+        # Processar em background (asyncio.create_task para rodar em paralelo)
+        asyncio.create_task(
+            process_and_respond(phone, message, media_type, media_url)
         )
 
         return {"success": True, "message": "Mensagem recebida e sendo processada"}

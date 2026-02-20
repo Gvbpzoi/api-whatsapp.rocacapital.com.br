@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 from decimal import Decimal
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from loguru import logger
 
@@ -32,43 +33,81 @@ class SupabaseCarrinho:
 
     def __init__(self):
         """Inicializa conexão com Supabase"""
-        # Tentar variáveis de ambiente na ordem de prioridade:
-        # 1. DIRECT_URL (conexão direta, melhor para transações)
-        # 2. DATABASE_URL (com pgbouncer, será sanitizado)
         self.db_url = os.getenv("DIRECT_URL") or os.getenv("DATABASE_URL")
-        self.connection = None
-        
+        self._pool = None
+
         if self.db_url:
             try:
-                # Sanitizar URL para remover parâmetros incompatíveis com psycopg2
                 sanitized_url = sanitize_pg_dsn(self.db_url)
-                self.connection = psycopg2.connect(sanitized_url, sslmode="require")
-                logger.info("✅ Conectado ao Supabase para carrinhos persistentes")
+                self.db_url = sanitized_url
+                self._pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=5,
+                    dsn=sanitized_url,
+                    sslmode="require",
+                )
+                logger.info("Connection pool Carrinho criado (1-5 conexoes)")
             except Exception as e:
-                logger.error(f"❌ Erro ao conectar Supabase: {e}")
-                self.connection = None
+                logger.error(f"❌ Erro ao criar pool carrinho: {e}")
+                self._pool = None
         else:
-            logger.warning("⚠️ Nenhuma variável de DB configurada (DIRECT_URL ou DATABASE_URL), usando carrinhos em memória")
+            logger.warning("⚠️ Nenhuma variável de DB configurada (DIRECT_URL ou DATABASE_URL)")
+
+    def _get_connection(self):
+        """Obtém conexão do pool, com fallback para conexão direta"""
+        if self._pool:
+            try:
+                return self._pool.getconn()
+            except Exception as e:
+                logger.warning(f"Pool carrinho falhou, tentando conexao direta: {e}")
+        if self.db_url:
+            try:
+                return psycopg2.connect(self.db_url, sslmode="require")
+            except Exception as e:
+                logger.error(f"Erro ao conectar diretamente (carrinho): {e}")
+        return None
+
+    def _put_connection(self, conn):
+        """Devolve conexão ao pool ou fecha se foi direta"""
+        if not conn:
+            return
+        if self._pool:
+            try:
+                self._pool.putconn(conn)
+                return
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def _execute(self, query: str, params: tuple = None, fetch: bool = True) -> Optional[List[Dict]]:
-        """Executa query no banco"""
-        if not self.connection:
+        """Executa query no banco com conexão do pool"""
+        conn = self._get_connection()
+        if not conn:
+            logger.error("Sem conexao disponivel para carrinho")
             return None
 
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(query, params)
-                
+
                 if fetch:
                     result = cursor.fetchall()
-                    # Converter RealDictRow para dict simples
+                    self._put_connection(conn)
                     return [dict(row) for row in result] if result else []
                 else:
-                    self.connection.commit()
+                    conn.commit()
+                    self._put_connection(conn)
                     return []
         except Exception as e:
-            logger.error(f"❌ Erro ao executar query: {e}")
-            self.connection.rollback()
+            logger.error(f"❌ Erro ao executar query carrinho: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            self._put_connection(conn)
             return None
 
     def adicionar_item(
@@ -82,7 +121,7 @@ class SupabaseCarrinho:
         """
         Adiciona ou atualiza item no carrinho.
         Se item já existe, soma a quantidade.
-        
+
         Returns:
             Dict com status da operação
         """
@@ -115,7 +154,7 @@ class SupabaseCarrinho:
                     (nova_quantidade, novo_subtotal, telefone, produto_id),
                     fetch=False
                 )
-                
+
                 logger.info(f"✅ Quantidade atualizada: {produto_nome} -> {nova_quantidade} un")
                 return {
                     "status": "updated",
@@ -133,7 +172,7 @@ class SupabaseCarrinho:
                     (telefone, produto_id, produto_nome, preco_unitario, quantidade, subtotal),
                     fetch=False
                 )
-                
+
                 logger.info(f"✅ Item adicionado ao carrinho: {produto_nome}")
                 return {"status": "added"}
 
@@ -144,7 +183,7 @@ class SupabaseCarrinho:
     def obter_carrinho(self, telefone: str) -> List[Dict[str, Any]]:
         """
         Obtém todos os itens do carrinho de um cliente.
-        
+
         Returns:
             Lista de itens do carrinho
         """
@@ -156,7 +195,7 @@ class SupabaseCarrinho:
                 ORDER BY criado_em ASC
             """
             result = self._execute(query, (telefone,))
-            
+
             if result:
                 # Converter Decimal para float para JSON
                 items = []
@@ -169,7 +208,7 @@ class SupabaseCarrinho:
                         "subtotal": float(item["subtotal"])
                     })
                 return items
-            
+
             return []
 
         except Exception as e:
@@ -185,10 +224,10 @@ class SupabaseCarrinho:
                 WHERE telefone = %s
             """
             result = self._execute(query, (telefone,))
-            
+
             if result and result[0]["total"]:
                 return float(result[0]["total"])
-            
+
             return 0.0
 
         except Exception as e:
@@ -313,51 +352,13 @@ _carrinho_service: Optional[SupabaseCarrinho] = None
 def get_supabase_carrinho() -> SupabaseCarrinho:
     """
     Retorna instância singleton do serviço de carrinhos.
-    
+
     Returns:
         SupabaseCarrinho instance
     """
     global _carrinho_service
-    
+
     if _carrinho_service is None:
         _carrinho_service = SupabaseCarrinho()
-    
+
     return _carrinho_service
-
-
-# Para testes
-if __name__ == "__main__":
-    print("🧪 Testando SupabaseCarrinho\n")
-    
-    carrinho = SupabaseCarrinho()
-    telefone_teste = "5531999999999"
-    
-    # Teste 1: Adicionar item
-    print("1️⃣ Adicionar item:")
-    result = carrinho.adicionar_item(
-        telefone=telefone_teste,
-        produto_id="11111111-1111-1111-1111-111111111111",
-        produto_nome="Queijo Teste",
-        preco_unitario=45.00,
-        quantidade=2
-    )
-    print(f"   Status: {result['status']}\n")
-    
-    # Teste 2: Obter carrinho
-    print("2️⃣ Obter carrinho:")
-    items = carrinho.obter_carrinho(telefone_teste)
-    print(f"   Itens: {len(items)}")
-    for item in items:
-        print(f"   - {item['nome']}: {item['quantidade']}x R$ {item['preco_unitario']}\n")
-    
-    # Teste 3: Calcular total
-    print("3️⃣ Calcular total:")
-    total = carrinho.calcular_total(telefone_teste)
-    print(f"   Total: R$ {total:.2f}\n")
-    
-    # Teste 4: Limpar carrinho
-    print("4️⃣ Limpar carrinho:")
-    carrinho.limpar_carrinho(telefone_teste)
-    print("   ✅ Carrinho limpo\n")
-    
-    print("✅ Todos os testes concluídos!")
