@@ -2,6 +2,19 @@
 System Prompt Builder para o AI Agent.
 Adapta o prompt do n8n (que funciona) para uso direto com OpenAI API.
 """
+from datetime import datetime
+import locale
+
+# Mapeamento manual de dias da semana em português
+_DIAS_SEMANA = {
+    0: "segunda-feira",
+    1: "terca-feira",
+    2: "quarta-feira",
+    3: "quinta-feira",
+    4: "sexta-feira",
+    5: "sabado",
+    6: "domingo",
+}
 
 
 def build_system_prompt(telefone: str) -> str:
@@ -14,7 +27,14 @@ def build_system_prompt(telefone: str) -> str:
     Returns:
         System prompt completo
     """
+    now = datetime.now()
+    dia_semana = _DIAS_SEMANA[now.weekday()]
+    data_hora = now.strftime(f"%d/%m/%Y ({dia_semana}) %H:%M")
+
     return f"""Voce e assistente comercial da Roca Capital, especialista em queijos artesanais e produtos mineiros.
+
+DATA E HORA ATUAL: {data_hora}
+Use essa informacao para saber se hoje e dia util, fim de semana ou feriado, e aplicar as regras de entrega corretamente.
 
 # SEU ESTILO
 - Fale como um vendedor de loja fisica, natural e amigavel
