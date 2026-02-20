@@ -30,7 +30,7 @@ class SupabaseProdutos:
 
     def __init__(self):
         """Inicializa conexão com Supabase"""
-        self.database_url = os.getenv("DATABASE_URL") or os.getenv("DIRECT_URL")
+        self.database_url = os.getenv("DIRECT_URL") or os.getenv("DATABASE_URL")
         if not self.database_url:
             logger.warning("⚠️ DATABASE_URL não configurado - usando modo mock")
             self.database_url = None
