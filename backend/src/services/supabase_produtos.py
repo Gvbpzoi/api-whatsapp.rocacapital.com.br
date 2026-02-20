@@ -50,22 +50,35 @@ class SupabaseProdutos:
                 self._pool = None
 
     def _get_connection(self):
-        """Obtém conexão do pool"""
-        if not self._pool:
-            return None
-        try:
-            return self._pool.getconn()
-        except Exception as e:
-            logger.error(f"Erro ao obter conexao do pool produtos: {e}")
-            return None
+        """Obtém conexão do pool, com fallback para conexão direta"""
+        if self._pool:
+            try:
+                return self._pool.getconn()
+            except Exception as e:
+                logger.warning(f"Pool falhou, tentando conexao direta: {e}")
+        # Fallback: conexão direta
+        if self.database_url:
+            try:
+                return psycopg2.connect(self.database_url, sslmode="require")
+            except Exception as e:
+                logger.error(f"Erro ao conectar diretamente: {e}")
+        return None
 
     def _put_connection(self, conn):
-        """Devolve conexão ao pool"""
-        if conn and self._pool:
+        """Devolve conexão ao pool ou fecha se foi direta"""
+        if not conn:
+            return
+        if self._pool:
             try:
                 self._pool.putconn(conn)
+                return
             except Exception:
                 pass
+        # Fallback: fechar conexão direta
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def buscar_produtos(
         self,
@@ -92,6 +105,9 @@ class SupabaseProdutos:
 
         try:
             conn = self._get_connection()
+            if not conn:
+                logger.error("Sem conexao disponivel para buscar produtos")
+                return []
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Construir query SQL

@@ -50,20 +50,32 @@ class ChatHistoryManager:
             logger.warning("Sem DATABASE_URL - historico desabilitado")
 
     def _get_connection(self):
-        if not self._pool:
-            return None
-        try:
-            return self._pool.getconn()
-        except Exception as e:
-            logger.error(f"Erro ao obter conexao do pool: {e}")
-            return None
+        if self._pool:
+            try:
+                return self._pool.getconn()
+            except Exception as e:
+                logger.warning(f"Pool falhou, tentando conexao direta: {e}")
+        # Fallback: conexão direta
+        if self.db_url:
+            try:
+                return psycopg2.connect(self.db_url, sslmode="require")
+            except Exception as e:
+                logger.error(f"Erro ao conectar diretamente: {e}")
+        return None
 
     def _put_connection(self, conn):
-        if conn and self._pool:
+        if not conn:
+            return
+        if self._pool:
             try:
                 self._pool.putconn(conn)
+                return
             except Exception:
                 pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def load_history(self, telefone: str, limit: int = 30) -> List[Dict[str, Any]]:
         """
